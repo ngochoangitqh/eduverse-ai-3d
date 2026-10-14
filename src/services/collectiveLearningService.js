@@ -201,7 +201,7 @@ export function getCollectiveWisdomPrompt(maxInsights = 8) {
     text += `${idx + 1}. [${item.subject} - ${item.topic}]: ${item.insight}\n`;
   });
 
-  text += 'HÃY VẬN DỤNG CÁC KINH NGHIỆM ĐÃ HỌC TRÊN ĐỂ: Bắt đúng tâm lý học sinh, cảnh báo trước các bẫy đề thi và cung cấp phương pháp giải tối ưu nhất!\n';
+  text += 'LƯU Ý: Vận dụng các kinh nghiệm trên một cách tự nhiên, tinh tế, khéo léo lồng ghép khi câu hỏi có liên quan, tuyệt đối không chép lại máy móc cả danh sách này.\n';
 
   return text;
 }
