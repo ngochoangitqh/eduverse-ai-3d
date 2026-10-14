@@ -16,6 +16,34 @@ export const setActiveModel = (model) => {
   localStorage.setItem('GEMINI_MODEL', model);
 };
 
+export const getActiveThinkingMode = () => {
+  return localStorage.getItem('GEMINI_THINKING_MODE') || 'deep';
+};
+
+export const setActiveThinkingMode = (mode) => {
+  localStorage.setItem('GEMINI_THINKING_MODE', mode);
+};
+
+/**
+ * Xây dựng cấu hình Thinking Budget tương thích theo từng dòng mô hình:
+ * - Gemini 3.x (3.8-flash, 3.5-flash-lite): Dùng thinkingLevel ('high' cho bài khó, 'low' cho bài nhanh)
+ * - Gemini 2.5: Dùng thinkingBudget (8192 tokens cho bài khó, 1024 cho bài nhanh)
+ */
+export function buildThinkingConfig(model, explicitMode = null) {
+  const mode = explicitMode || getActiveThinkingMode();
+  const isDeep = mode === 'deep' || mode === 'high';
+
+  if (model && model.includes('2.5')) {
+    return {
+      thinkingBudget: isDeep ? 8192 : 1024,
+    };
+  }
+
+  return {
+    thinkingLevel: isDeep ? 'high' : 'low',
+  };
+}
+
 // Danh sách model tương thích tốt nhất cho các dự án mới:
 // gemini-3.5-flash-lite: Siêu nhanh, dung lượng máy chủ dồi dào, không bị 503
 // gemini-3.8-flash: Mô hình tư duy sâu thế hệ mới
@@ -79,7 +107,7 @@ export function formatAIError(err) {
   return msg;
 }
 
-export async function generateText(prompt, systemInstruction = '', imagePart = null) {
+export async function generateText(prompt, systemInstruction = '', imagePart = null, thinkingMode = null) {
   const ai = getAIClient();
   const contents = imagePart ? [imagePart, prompt] : prompt;
 
@@ -89,16 +117,14 @@ export async function generateText(prompt, systemInstruction = '', imagePart = n
       contents,
       config: {
         systemInstruction: systemInstruction || undefined,
-        thinkingConfig: {
-          thinkingLevel: 'low',
-        },
+        thinkingConfig: buildThinkingConfig(model, thinkingMode),
       },
     });
     return response.text;
   });
 }
 
-export async function generateStream(prompt, onChunk, systemInstruction = '', imagePart = null) {
+export async function generateStream(prompt, onChunk, systemInstruction = '', imagePart = null, thinkingMode = null) {
   const ai = getAIClient();
   const contents = imagePart ? [imagePart, prompt] : prompt;
 
@@ -108,9 +134,7 @@ export async function generateStream(prompt, onChunk, systemInstruction = '', im
       contents,
       config: {
         systemInstruction: systemInstruction || undefined,
-        thinkingConfig: {
-          thinkingLevel: 'low',
-        },
+        thinkingConfig: buildThinkingConfig(model, thinkingMode),
       },
     });
 
@@ -125,7 +149,7 @@ export async function generateStream(prompt, onChunk, systemInstruction = '', im
   });
 }
 
-export async function generateJSON(prompt, schema, systemInstruction = '') {
+export async function generateJSON(prompt, schema, systemInstruction = '', thinkingMode = null) {
   const ai = getAIClient();
 
   return await executeWithFallback(async (model) => {
@@ -136,9 +160,7 @@ export async function generateJSON(prompt, schema, systemInstruction = '') {
         systemInstruction: systemInstruction || undefined,
         responseMimeType: 'application/json',
         responseSchema: schema,
-        thinkingConfig: {
-          thinkingLevel: 'low',
-        },
+        thinkingConfig: buildThinkingConfig(model, thinkingMode),
       },
     });
     return JSON.parse(response.text);
@@ -204,6 +226,7 @@ export async function generateChatStream({
   imagePart = null,
   systemInstruction = '',
   onChunk,
+  thinkingMode = null,
 }) {
   const ai = getAIClient();
 
@@ -226,9 +249,7 @@ export async function generateChatStream({
       contents,
       config: {
         systemInstruction: systemInstruction || undefined,
-        thinkingConfig: {
-          thinkingLevel: 'low',
-        },
+        thinkingConfig: buildThinkingConfig(model, thinkingMode),
       },
     });
 

@@ -3,14 +3,20 @@ import {
   Compass, Bot, Calculator, Presentation, FileText,
   Mic, HelpCircle, GitBranch, Map, Globe, Box, Key
 } from 'lucide-react';
-import { getActiveModel, setActiveModel } from '../../services/geminiService';
+import { getActiveModel, setActiveModel, getActiveThinkingMode, setActiveThinkingMode } from '../../services/geminiService';
 
 export default function Sidebar({ activeTab, setActiveTab, onOpenApiKey }) {
   const [model, setModel] = useState(getActiveModel());
+  const [thinkingMode, setThinkingMode] = useState(getActiveThinkingMode());
 
   const handleModelChange = (newModel) => {
     setModel(newModel);
     setActiveModel(newModel);
+  };
+
+  const handleThinkingModeChange = (newMode) => {
+    setThinkingMode(newMode);
+    setActiveThinkingMode(newMode);
   };
   const mainNav = [
     { id: 'dashboard', label: 'Tổng Quan 3D', icon: Compass, color: 'text-indigo-400' },
@@ -103,6 +109,22 @@ export default function Sidebar({ activeTab, setActiveTab, onOpenApiKey }) {
         >
           <option value="gemini-3.5-flash-lite">⚡ 3.5 Flash-Lite (Khuyên dùng - Nhanh)</option>
           <option value="gemini-3.8-flash">🧠 3.8 Flash (Tư duy sâu)</option>
+        </select>
+
+        <div className="flex items-center justify-between text-xs text-slate-400 pt-1">
+          <span>Thinking Budget</span>
+          <span className="text-[10px] font-semibold text-purple-400">
+            {thinkingMode === 'deep' ? '🧠 Chuyên sâu' : '⚡ Tốc độ'}
+          </span>
+        </div>
+
+        <select
+          value={thinkingMode}
+          onChange={(e) => handleThinkingModeChange(e.target.value)}
+          className="w-full bg-slate-950 border border-purple-500/30 text-xs text-purple-300 rounded-lg p-2 focus:outline-none focus:border-purple-500 font-medium cursor-pointer"
+        >
+          <option value="deep">🧠 Chuyên sâu (High - Giải bài khó)</option>
+          <option value="fast">⚡ Nhanh (Low - Tốc độ cao)</option>
         </select>
 
         <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">

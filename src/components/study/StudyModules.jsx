@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { Type } from '@google/genai';
 import { renderMarkdownWithMath } from '../../utils/mathRenderer';
 import { Image as ImageIcon, X, Paperclip, Upload, RotateCcw } from 'lucide-react';
-import { generateText, generateStream, generateChatStream, generateJSON, formatAIError } from '../../services/geminiService';
+import { generateText, generateStream, generateChatStream, generateJSON, formatAIError, getActiveThinkingMode, setActiveThinkingMode } from '../../services/geminiService';
 import { CHATBOT_SYSTEM_INSTRUCTION, SOLVER_SYSTEM_INSTRUCTION } from '../../config/systemInstructions';
 import { createSpeechRecognizer } from '../../services/speechService';
 
@@ -27,6 +27,7 @@ export function ChatbotView() {
   const [input, setInput] = useState('');
   const [attachedImage, setAttachedImage] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [thinkingMode, setThinkingMode] = useState(getActiveThinkingMode());
   const fileInputRef = useRef(null);
 
   const handlePaste = async (e) => {
@@ -91,6 +92,7 @@ export function ChatbotView() {
         newPrompt: promptText,
         imagePart,
         systemInstruction: CHATBOT_SYSTEM_INSTRUCTION,
+        thinkingMode,
         onChunk: (currentText) => {
           if (!streamed) {
             streamed = true;
@@ -133,8 +135,23 @@ export function ChatbotView() {
           <h2 className="text-xl font-bold">🤖 AI Chatbot Gia Sư 24/7</h2>
           <span className="text-[11px] text-cyan-300 bg-cyan-500/10 border border-cyan-500/30 px-2.5 py-1 rounded-full font-medium flex items-center gap-1.5">
             <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
-            🧠 Nhớ ngữ cảnh: {userTurnCount} lượt trao đổi
+            🧠 Nhớ ngữ cảnh: {userTurnCount} lượt
           </span>
+          <button
+            onClick={() => {
+              const next = thinkingMode === 'deep' ? 'fast' : 'deep';
+              setThinkingMode(next);
+              setActiveThinkingMode(next);
+            }}
+            className={`text-[11px] px-2.5 py-1 rounded-full font-semibold flex items-center gap-1.5 border transition-all cursor-pointer ${
+              thinkingMode === 'deep'
+                ? 'bg-purple-500/20 text-purple-300 border-purple-500/40 shadow-sm shadow-purple-500/20'
+                : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-slate-200'
+            }`}
+            title="Bấm để bật/tắt chế độ Tư duy sâu (Thinking Budget tối đa cho bài khó)"
+          >
+            <span>{thinkingMode === 'deep' ? '🧠 Tư duy sâu: BẬT' : '⚡ Nhanh (Low Budget)'}</span>
+          </button>
         </div>
 
         <div className="flex items-center gap-2">
@@ -147,7 +164,7 @@ export function ChatbotView() {
             <span>Đoạn chat mới</span>
           </button>
           <span className="text-xs text-slate-400 flex items-center gap-1.5 bg-slate-900/60 px-3 py-1.5 rounded-xl border border-slate-700">
-            📋 Hỗ trợ dán ảnh (Ctrl+V)
+            📋 Ctrl+V dán ảnh
           </span>
         </div>
       </div>
@@ -169,7 +186,16 @@ export function ChatbotView() {
             </div>
           </div>
         ))}
-        {loading && <div className="text-cyan-400 text-sm animate-pulse">AI đang suy nghĩ...</div>}
+        {loading && (
+          <div className="text-purple-300 text-xs flex items-center gap-2 animate-pulse py-2 px-3 rounded-xl bg-purple-950/30 border border-purple-500/20 w-fit">
+            <span className="w-2 h-2 rounded-full bg-purple-400 animate-ping" />
+            <span>
+              {thinkingMode === 'deep'
+                ? '🧠 Đang dùng Thinking Budget tối đa: AI đang lập luận đa bước và kiểm tra bẫy...'
+                : '⚡ AI đang soạn câu trả lời...'}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Thumbnail ảnh đã dán hoặc chọn trước khi gửi */}
@@ -238,6 +264,7 @@ export function SolverView() {
   const [attachedImage, setAttachedImage] = useState(null);
   const [solution, setSolution] = useState('');
   const [loading, setLoading] = useState(false);
+  const [solverThinkingMode, setSolverThinkingMode] = useState('deep');
   const solverFileInputRef = useRef(null);
 
   const handlePaste = async (e) => {
@@ -279,14 +306,17 @@ export function SolverView() {
         }
       : null;
 
-    const promptText = `Giải chi tiết bài tập sau từng bước (Phương pháp, Lời giải, Đáp số): \n${problem || 'Đề bài nằm trong hình ảnh đính kèm.'}`;
+    const promptText = solverThinkingMode === 'deep'
+      ? `[YÊU CẦU: Vận dụng tối đa Thinking Budget để suy luận sâu và kiểm tra logic bài khó]\nGiải chi tiết bài tập sau từng bước (Phương pháp, Lời giải, Đáp số): \n${problem || 'Đề bài nằm trong hình ảnh đính kèm.'}`
+      : `Giải chi tiết bài tập sau từng bước (Phương pháp, Lời giải, Đáp số): \n${problem || 'Đề bài nằm trong hình ảnh đính kèm.'}`;
 
     try {
       await generateStream(
         promptText,
         (text) => setSolution(text),
         SOLVER_SYSTEM_INSTRUCTION,
-        imagePart
+        imagePart,
+        solverThinkingMode
       );
     } catch (e) {
       setSolution('⚠️ ' + formatAIError(e));
@@ -298,11 +328,39 @@ export function SolverView() {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6" onPaste={handlePaste}>
       <div className="glass-panel rounded-2xl p-6 space-y-4">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-2">
           <h2 className="text-xl font-bold">📐 Giải Bài Tập Đa Môn</h2>
-          <span className="text-xs text-slate-400 bg-slate-900/60 px-3 py-1.5 rounded-lg border border-slate-700">
-            Dán ảnh đề bài (Ctrl+V)
-          </span>
+          <div className="flex items-center gap-2">
+            <div className="flex bg-slate-900 border border-slate-700 rounded-xl p-0.5 text-xs">
+              <button
+                type="button"
+                onClick={() => setSolverThinkingMode('deep')}
+                className={`px-2.5 py-1 rounded-lg font-medium transition-all flex items-center gap-1 cursor-pointer ${
+                  solverThinkingMode === 'deep'
+                    ? 'bg-purple-600 text-white shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+                title="Kích hoạt Thinking Budget tối đa cho bài khó / vận dụng cao"
+              >
+                <span>🧠 Tư duy sâu (Bài khó)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setSolverThinkingMode('fast')}
+                className={`px-2.5 py-1 rounded-lg font-medium transition-all flex items-center gap-1 cursor-pointer ${
+                  solverThinkingMode === 'fast'
+                    ? 'bg-indigo-600 text-white shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+                title="Giải nhanh với bài tập cơ bản"
+              >
+                <span>⚡ Nhanh</span>
+              </button>
+            </div>
+            <span className="text-xs text-slate-400 bg-slate-900/60 px-3 py-1.5 rounded-lg border border-slate-700 hidden sm:inline">
+              Ctrl+V dán ảnh
+            </span>
+          </div>
         </div>
 
         {attachedImage && (
@@ -360,8 +418,31 @@ export function SolverView() {
         </div>
       </div>
       <div className="glass-panel rounded-2xl p-6 overflow-y-auto max-h-[75vh]">
-        <h3 className="font-bold text-cyan-400 mb-3">Lời Giải Từ AI:</h3>
-        {solution ? <div className="prose prose-invert text-sm max-w-none" dangerouslySetInnerHTML={{ __html: renderMarkdownWithMath(solution) }} /> : <p className="text-slate-500 text-sm">Kết quả lời giải sẽ hiển thị tại đây.</p>}
+        <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-800">
+          <h3 className="font-bold text-cyan-400">Lời Giải Từ AI:</h3>
+          <span className={`text-[11px] px-2.5 py-0.5 rounded-full font-medium ${
+            solverThinkingMode === 'deep'
+              ? 'bg-purple-500/10 text-purple-300 border border-purple-500/30'
+              : 'bg-indigo-500/10 text-indigo-300 border border-indigo-500/30'
+          }`}>
+            {solverThinkingMode === 'deep' ? '🧠 Chế độ: High Thinking Budget' : '⚡ Chế độ: Fast'}
+          </span>
+        </div>
+        {loading && (
+          <div className="p-3 mb-4 rounded-xl bg-purple-950/40 border border-purple-500/30 text-purple-300 text-xs flex items-center gap-2 animate-pulse">
+            <span className="w-2 h-2 rounded-full bg-purple-400 animate-ping" />
+            <span>
+              {solverThinkingMode === 'deep'
+                ? '🧠 Đang kích hoạt Thinking Budget tối đa: AI đang lập luận đa bước, thử nghiệm các hướng giải và rà soát bẫy đề thi...'
+                : '⚡ AI đang giải bài tập...'}
+            </span>
+          </div>
+        )}
+        {solution ? (
+          <div className="prose prose-invert text-sm max-w-none" dangerouslySetInnerHTML={{ __html: renderMarkdownWithMath(solution) }} />
+        ) : !loading && (
+          <p className="text-slate-500 text-sm">Kết quả lời giải sẽ hiển thị tại đây.</p>
+        )}
       </div>
     </div>
   );

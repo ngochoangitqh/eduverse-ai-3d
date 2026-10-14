@@ -182,7 +182,9 @@ export function WritingGraderView({ englishMode }) {
     try {
       const res = await generateText(
         `Chế độ thi: ${englishMode} Writing.\nBài viết của học viên:\n${essay}`,
-        ENGLISH_WRITING_SYSTEM_INSTRUCTION
+        ENGLISH_WRITING_SYSTEM_INSTRUCTION,
+        null,
+        'deep'
       );
       setResult(res);
     } catch (e) {
