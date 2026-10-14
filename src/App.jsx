@@ -16,7 +16,7 @@ import {
   MeetingTrackerView, QuizMakerView, MindmapView, RoadmapView
 } from './components/study/StudyModules';
 import {
-  getFirebaseConfig, saveFirebaseConfig, isFirebaseConfigured, parseFirebaseSnippet
+  getFirebaseConfig, saveFirebaseConfig, isFirebaseConfigured, parseFirebaseSnippet, resetFirebaseToDefault
 } from './config/firebase';
 import {
   subscribeToAuthChanges, loginWithGoogle, logoutUser
@@ -58,6 +58,13 @@ export default function App() {
     setFirebaseConfigState(parsed);
     setFirebaseSnippet('');
     alert('Đã lưu cấu hình Firebase thành công! Dự án: ' + parsed.projectId);
+  };
+
+  const handleResetFirebase = () => {
+    const def = resetFirebaseToDefault();
+    setFirebaseConfigState(def);
+    setFirebaseSnippet('');
+    alert('Đã chuyển về dự án Firebase mặc định: ' + def.projectId);
   };
 
   const handleGoogleLogin = async () => {
@@ -291,16 +298,28 @@ export default function App() {
                     <h4 className="text-sm font-bold text-white flex items-center gap-1.5">
                       <Flame className="w-4 h-4 text-amber-400" /> Đồng bộ & Lưu Trữ Firebase
                     </h4>
-                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
-                      isFirebaseConfigured()
-                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                        : 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
-                    }`}>
-                      {isFirebaseConfigured() ? `✅ Đã kết nối: ${firebaseConfigState.projectId}` : '⚠️ Chưa cấu hình'}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                        isFirebaseConfigured()
+                          ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                          : 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                      }`}>
+                        {isFirebaseConfigured() ? `✅ Đã kết nối: ${firebaseConfigState.projectId}` : '⚠️ Chưa cấu hình'}
+                      </span>
+                      {firebaseConfigState.projectId !== 'eduverse-ai-3d' && (
+                        <button
+                          onClick={handleResetFirebase}
+                          className="text-[10px] text-indigo-400 hover:text-indigo-300 underline cursor-pointer"
+                        >
+                          Dùng eduverse-ai-3d
+                        </button>
+                      )}
+                    </div>
                   </div>
                   <p className="text-xs text-slate-300">
-                    Lưu bài tập, flashcard, lịch sử chat và tiến độ học lên đám mây Firestore & Storage.
+                    {firebaseConfigState.projectId === 'eduverse-ai-3d'
+                      ? 'Dự án eduverse-ai-3d đã được kết nối sẵn. Bạn chỉ cần bấm Đóng để học ngay!'
+                      : 'Lưu bài tập, flashcard, lịch sử chat và tiến độ học lên đám mây Firestore & Storage.'}
                   </p>
                 </div>
 

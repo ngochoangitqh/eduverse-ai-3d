@@ -21,8 +21,16 @@ export function getFirebaseConfig() {
   if (localSaved) {
     try {
       const parsed = JSON.parse(localSaved);
-      if (parsed.apiKey && parsed.projectId) {
+      if (
+        parsed.apiKey &&
+        parsed.projectId &&
+        !parsed.projectId.includes('your') &&
+        !parsed.apiKey.includes('...')
+      ) {
         return parsed;
+      } else {
+        // Tự động xóa bỏ cấu hình placeholder mẫu cũ
+        localStorage.removeItem('FIREBASE_CONFIG');
       }
     } catch (_) {}
   }
@@ -37,10 +45,16 @@ export function getFirebaseConfig() {
     measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || '',
   };
 
-  if (envConfig.apiKey && envConfig.projectId) {
+  if (envConfig.apiKey && envConfig.projectId && !envConfig.projectId.includes('your')) {
     return envConfig;
   }
 
+  return DEFAULT_FIREBASE_CONFIG;
+}
+
+export function resetFirebaseToDefault() {
+  localStorage.removeItem('FIREBASE_CONFIG');
+  initFirebase();
   return DEFAULT_FIREBASE_CONFIG;
 }
 
