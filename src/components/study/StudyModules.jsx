@@ -1,11 +1,20 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Type } from '@google/genai';
 import { renderMarkdownWithMath } from '../../utils/mathRenderer';
-import { Image as ImageIcon, X, Paperclip, Upload, RotateCcw, Cloud } from 'lucide-react';
+import {
+  Image as ImageIcon, X, Paperclip, Upload, RotateCcw, Cloud,
+  Plus, Trash2, MessageSquare, History, ChevronLeft, ChevronRight
+} from 'lucide-react';
 import { generateText, generateStream, generateChatStream, generateJSON, formatAIError, getActiveThinkingMode, setActiveThinkingMode } from '../../services/geminiService';
 import { CHATBOT_SYSTEM_INSTRUCTION, SOLVER_SYSTEM_INSTRUCTION } from '../../config/systemInstructions';
 import { createSpeechRecognizer } from '../../services/speechService';
-import { saveSolutionToCloud, saveChatSessionToCloud, getCurrentUser } from '../../services/firebaseService';
+import {
+  saveSolutionToCloud,
+  saveChatSessionToCloud,
+  updateChatSessionInCloud,
+  deleteChatSessionFromCloud,
+  getCurrentUser
+} from '../../services/firebaseService';
 
 function fileToBase64(file) {
   return new Promise((resolve, reject) => {
@@ -20,16 +29,77 @@ function fileToBase64(file) {
   });
 }
 
-// 1. CHATBOT GIA SƯ
+// 1. CHATBOT GIA SƯ (Multi-session, Persistent History, Cloud Sync)
+const CHAT_STORAGE_KEY = 'EDUVERSE_CHAT_SESSIONS_V2';
+
+function createDefaultSession(title = 'Đoạn chat mới') {
+  return {
+    id: 'chat_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
+    title,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    messages: [
+      { role: 'ai', text: 'Xin chào! Mình là Gia sư AI. Bạn có thể gõ câu hỏi hoặc dán trực tiếp ảnh chụp màn hình (Ctrl+V) vào đây nhé!' }
+    ]
+  };
+}
+
+function getInitialChatSessions() {
+  try {
+    const raw = localStorage.getItem(CHAT_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+    }
+  } catch (e) {
+    console.error('Lỗi đọc lịch sử chat từ localStorage:', e);
+  }
+  return [createDefaultSession()];
+}
+
 export function ChatbotView() {
-  const [messages, setMessages] = useState([
-    { role: 'ai', text: 'Xin chào! Mình là Gia sư AI. Bạn có thể gõ câu hỏi hoặc dán trực tiếp ảnh chụp màn hình (Ctrl+V) vào đây nhé!' }
-  ]);
+  const [sessions, setSessions] = useState(getInitialChatSessions);
+  const [activeSessionId, setActiveSessionId] = useState(() => sessions[0]?.id || '');
+  const [showHistory, setShowHistory] = useState(true);
   const [input, setInput] = useState('');
   const [attachedImage, setAttachedImage] = useState(null);
   const [loading, setLoading] = useState(false);
   const [thinkingMode, setThinkingMode] = useState(getActiveThinkingMode());
+
   const fileInputRef = useRef(null);
+  const messagesEndRef = useRef(null);
+
+  // Lưu sessions vào localStorage mỗi khi có thay đổi
+  useEffect(() => {
+    try {
+      localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(sessions));
+    } catch (e) {
+      console.error('Lỗi ghi sessions vào localStorage:', e);
+    }
+  }, [sessions]);
+
+  // Đảm bảo activeSessionId luôn hợp lệ
+  useEffect(() => {
+    if (!sessions.some((s) => s.id === activeSessionId)) {
+      if (sessions.length > 0) {
+        setActiveSessionId(sessions[0].id);
+      }
+    }
+  }, [sessions, activeSessionId]);
+
+  const activeSession = sessions.find((s) => s.id === activeSessionId) || sessions[0] || createDefaultSession();
+  const messages = activeSession.messages || [];
+
+  // Tự động cuộn xuống tin nhắn mới nhất
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages.length, loading]);
 
   const handlePaste = async (e) => {
     const items = e.clipboardData?.items;
@@ -56,6 +126,43 @@ export function ChatbotView() {
     e.target.value = '';
   };
 
+  // Tạo đoạn chat mới
+  const handleCreateNewChat = () => {
+    const newSession = createDefaultSession();
+    setSessions((prev) => [newSession, ...prev]);
+    setActiveSessionId(newSession.id);
+    setInput('');
+    setAttachedImage(null);
+  };
+
+  // Xóa đoạn chat cũ
+  const handleDeleteSession = async (e, sessionId) => {
+    e.stopPropagation();
+    const targetSession = sessions.find((s) => s.id === sessionId);
+    const title = targetSession?.title || 'đoạn chat này';
+    if (!confirm(`Bạn có chắc chắn muốn xóa "${title}" không?`)) return;
+
+    const remaining = sessions.filter((s) => s.id !== sessionId);
+
+    if (remaining.length === 0) {
+      const fresh = createDefaultSession();
+      setSessions([fresh]);
+      setActiveSessionId(fresh.id);
+    } else {
+      setSessions(remaining);
+      if (activeSessionId === sessionId) {
+        setActiveSessionId(remaining[0].id);
+      }
+    }
+
+    // Xóa trên Firestore nếu đã đăng nhập
+    try {
+      await deleteChatSessionFromCloud(sessionId);
+    } catch (err) {
+      console.warn('Lỗi khi xóa trên Firestore (bỏ qua nếu chỉ lưu local):', err);
+    }
+  };
+
   const sendMessage = async () => {
     if ((!input.trim() && !attachedImage) || loading) return;
     const userMsg = input.trim();
@@ -72,7 +179,29 @@ export function ChatbotView() {
       mimeType: currentImg?.mimeType,
     };
 
-    setMessages((prev) => [...prev, newMsgObj]);
+    // Tự động đặt tên tiêu đề theo câu hỏi đầu tiên
+    let updatedTitle = activeSession.title;
+    if (updatedTitle === 'Đoạn chat mới' || !updatedTitle) {
+      const rawText = userMsg || 'Ảnh bài tập';
+      updatedTitle = rawText.length > 32 ? rawText.slice(0, 32) + '...' : rawText;
+    }
+
+    const updatedMessages = [...messages, newMsgObj];
+
+    // Cập nhật state session với tin nhắn người dùng
+    setSessions((prev) =>
+      prev.map((s) =>
+        s.id === activeSession.id
+          ? {
+              ...s,
+              title: updatedTitle,
+              updatedAt: Date.now(),
+              messages: updatedMessages,
+            }
+          : s
+      )
+    );
+
     setLoading(true);
 
     const imagePart = currentImg
@@ -89,7 +218,7 @@ export function ChatbotView() {
     let streamed = false;
     try {
       await generateChatStream({
-        messages, // Gửi kèm toàn bộ lịch sử các câu chat trước để nhớ ngữ cảnh
+        messages: updatedMessages,
         newPrompt: promptText,
         imagePart,
         systemInstruction: CHATBOT_SYSTEM_INSTRUCTION,
@@ -98,36 +227,60 @@ export function ChatbotView() {
           if (!streamed) {
             streamed = true;
             setLoading(false);
-            setMessages((prev) => [...prev, { role: 'ai', text: currentText }]);
+            setSessions((prev) =>
+              prev.map((s) =>
+                s.id === activeSession.id
+                  ? {
+                      ...s,
+                      messages: [...updatedMessages, { role: 'ai', text: currentText }],
+                    }
+                  : s
+              )
+            );
           } else {
-            setMessages((prev) => {
-              const updated = [...prev];
-              updated[updated.length - 1] = { role: 'ai', text: currentText };
-              return updated;
-            });
+            setSessions((prev) =>
+              prev.map((s) => {
+                if (s.id !== activeSession.id) return s;
+                const curMsgs = [...s.messages];
+                curMsgs[curMsgs.length - 1] = { role: 'ai', text: currentText };
+                return { ...s, messages: curMsgs };
+              })
+            );
           }
         },
       });
+
+      // Tự động đồng bộ lên Firebase nếu người dùng đã đăng nhập
+      const user = getCurrentUser();
+      if (user) {
+        setSessions((currentSessions) => {
+          const cur = currentSessions.find((s) => s.id === activeSession.id);
+          if (cur) {
+            updateChatSessionInCloud(cur.id, cur.messages, cur.title).catch(() => {});
+          }
+          return currentSessions;
+        });
+      }
     } catch (err) {
-      setMessages((prev) => [...prev, { role: 'ai', text: '⚠️ ' + formatAIError(err) }]);
+      setSessions((prev) =>
+        prev.map((s) =>
+          s.id === activeSession.id
+            ? {
+                ...s,
+                messages: [...s.messages, { role: 'ai', text: '⚠️ ' + formatAIError(err) }],
+              }
+            : s
+        )
+      );
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleResetChat = () => {
-    if (confirm('Bắt đầu cuộc trò chuyện mới và làm mới bộ nhớ ngữ cảnh?')) {
-      setMessages([
-        { role: 'ai', text: 'Xin chào! Mình đã làm mới bộ nhớ ngữ cảnh. Bạn cần giải đáp bài tập hay lý thuyết môn nào?' }
-      ]);
-      setAttachedImage(null);
     }
   };
 
   const handleSaveToCloud = async () => {
     const user = getCurrentUser();
     if (!user) {
-      alert('Vui lòng đăng nhập Google ở menu bên trái (Cài đặt) để đồng bộ dữ liệu lên Firebase Cloud!');
+      alert('Vui lòng đăng nhập tài khoản (ở góc dưới trái hoặc Cài đặt) để đồng bộ dữ liệu lên Firebase Cloud!');
       return;
     }
     if (messages.length <= 1) {
@@ -135,8 +288,8 @@ export function ChatbotView() {
       return;
     }
     try {
-      await saveChatSessionToCloud(messages);
-      alert('✅ Đã lưu phiên chat thành công lên Cloud Firestore!');
+      await updateChatSessionInCloud(activeSession.id, messages, activeSession.title);
+      alert(`✅ Đã lưu và đồng bộ "${activeSession.title}" lên Firebase Cloud thành công!`);
     } catch (e) {
       alert('Lỗi lưu đám mây: ' + (e.message || e));
     }
@@ -147,139 +300,240 @@ export function ChatbotView() {
   return (
     <div
       onPaste={handlePaste}
-      className="glass-panel rounded-2xl p-6 flex flex-col h-[calc(100vh-7rem)]"
+      className="glass-panel rounded-2xl p-4 sm:p-6 flex flex-row h-[calc(100vh-7rem)] overflow-hidden"
     >
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-4 pb-3 border-b border-slate-800">
-        <div className="flex items-center gap-3">
-          <h2 className="text-xl font-bold">🤖 AI Chatbot Gia Sư 24/7</h2>
-          <span className="text-[11px] text-cyan-300 bg-cyan-500/10 border border-cyan-500/30 px-2.5 py-1 rounded-full font-medium flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
-            🧠 Nhớ ngữ cảnh: {userTurnCount} lượt
-          </span>
-          <button
-            onClick={() => {
-              const next = thinkingMode === 'deep' ? 'fast' : 'deep';
-              setThinkingMode(next);
-              setActiveThinkingMode(next);
-            }}
-            className={`text-[11px] px-2.5 py-1 rounded-full font-semibold flex items-center gap-1.5 border transition-all cursor-pointer ${
-              thinkingMode === 'deep'
-                ? 'bg-purple-500/20 text-purple-300 border-purple-500/40 shadow-sm shadow-purple-500/20'
-                : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-slate-200'
-            }`}
-            title="Bấm để bật/tắt chế độ Tư duy sâu (Thinking Budget tối đa cho bài khó)"
-          >
-            <span>{thinkingMode === 'deep' ? '🧠 Tư duy sâu: BẬT' : '⚡ Nhanh (Low Budget)'}</span>
-          </button>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleSaveToCloud}
-            className="text-xs text-amber-300 hover:text-white bg-amber-950/40 hover:bg-amber-900/60 px-3 py-1.5 rounded-xl border border-amber-500/30 flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
-            title="Lưu toàn bộ phiên trao đổi này lên Firebase Cloud"
-          >
-            <Cloud className="w-3.5 h-3.5 text-amber-400" />
-            <span>Lưu Cloud</span>
-          </button>
-          <button
-            onClick={handleResetChat}
-            className="text-xs text-slate-300 hover:text-white bg-slate-900/90 hover:bg-slate-800 px-3 py-1.5 rounded-xl border border-slate-700 flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
-            title="Làm mới cuộc trò chuyện để bắt đầu chủ đề mới"
-          >
-            <RotateCcw className="w-3.5 h-3.5 text-cyan-400" />
-            <span>Đoạn chat mới</span>
-          </button>
-          <span className="text-xs text-slate-400 flex items-center gap-1.5 bg-slate-900/60 px-3 py-1.5 rounded-xl border border-slate-700">
-            📋 Ctrl+V dán ảnh
-          </span>
-        </div>
-      </div>
-
-      <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-        {messages.map((m, i) => (
-          <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-2xl p-4 rounded-2xl text-sm ${m.role === 'user' ? 'bg-indigo-600 text-white' : 'bg-slate-800/90 border border-slate-700'}`}>
-              {m.image && (
-                <img
-                  src={m.image}
-                  alt="Ảnh người dùng gửi"
-                  className="max-w-xs max-h-60 rounded-xl mb-3 object-contain bg-black/40 border border-white/20 cursor-pointer"
-                  onClick={() => window.open(m.image, '_blank')}
-                  title="Bấm để xem ảnh phóng to"
-                />
-              )}
-              {m.text && <div dangerouslySetInnerHTML={{ __html: renderMarkdownWithMath(m.text) }} />}
-            </div>
-          </div>
-        ))}
-        {loading && (
-          <div className="text-purple-300 text-xs flex items-center gap-2 animate-pulse py-2 px-3 rounded-xl bg-purple-950/30 border border-purple-500/20 w-fit">
-            <span className="w-2 h-2 rounded-full bg-purple-400 animate-ping" />
-            <span>
-              {thinkingMode === 'deep'
-                ? '🧠 Đang dùng Thinking Budget tối đa: AI đang lập luận đa bước và kiểm tra bẫy...'
-                : '⚡ AI đang soạn câu trả lời...'}
+      {/* 1. KHUNG LỊCH SỬ CHAT (SIDEBAR) */}
+      <div
+        className={`${
+          showHistory ? 'w-64 sm:w-72 flex' : 'hidden'
+        } flex-col border-r border-slate-800 pr-3 mr-3 shrink-0 h-full transition-all duration-200`}
+      >
+        <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-800/80">
+          <div className="flex items-center gap-2 text-sm font-semibold text-slate-200">
+            <History className="w-4 h-4 text-cyan-400" />
+            <span>Lịch sử chat</span>
+            <span className="text-[10px] bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded-full font-mono">
+              {sessions.length}
             </span>
           </div>
-        )}
-      </div>
-
-      {/* Thumbnail ảnh đã dán hoặc chọn trước khi gửi */}
-      {attachedImage && (
-        <div className="mt-3 flex items-center gap-3 p-2.5 bg-slate-900/90 border border-indigo-500/40 rounded-xl w-fit animate-fadeIn">
-          <img
-            src={attachedImage.url}
-            alt="Preview"
-            className="w-14 h-14 object-cover rounded-lg border border-indigo-400/50"
-          />
-          <div className="text-xs">
-            <p className="text-cyan-300 font-semibold flex items-center gap-1">
-              📸 Đã đính kèm ảnh
-            </p>
-            <p className="text-slate-400 text-[11px]">Sẵn sàng gửi (nhập thêm câu hỏi hoặc bấm Gửi)</p>
-          </div>
           <button
-            onClick={() => setAttachedImage(null)}
-            className="p-1.5 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-red-400 transition-colors ml-2"
-            title="Xóa ảnh này"
+            onClick={() => setShowHistory(false)}
+            className="p-1 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors cursor-pointer"
+            title="Đóng thanh lịch sử"
           >
-            <X className="w-4 h-4" />
+            <ChevronLeft className="w-4 h-4" />
           </button>
         </div>
-      )}
 
-      <div className="mt-4 flex gap-3 items-center">
-        <input
-          type="file"
-          ref={fileInputRef}
-          onChange={handleFileSelect}
-          accept="image/*"
-          className="hidden"
-        />
+        {/* Nút thêm đoạn chat mới */}
         <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          className="p-3 bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-xl text-slate-300 hover:text-cyan-400 transition-all flex items-center justify-center shrink-0"
-          title="Tải ảnh lên hoặc bấm Ctrl+V để dán ảnh màn hình"
+          onClick={handleCreateNewChat}
+          className="w-full py-2.5 px-3 mb-3 rounded-xl bg-gradient-to-r from-indigo-600 to-cyan-600 hover:from-indigo-500 hover:to-cyan-500 text-white font-semibold text-xs flex items-center justify-center gap-2 shadow-md shadow-indigo-600/20 transition-all cursor-pointer"
+          title="Tạo cuộc trò chuyện mới với Gia sư AI"
         >
-          <ImageIcon className="w-5 h-5" />
+          <Plus className="w-4 h-4" />
+          <span>Đoạn chat mới</span>
         </button>
 
-        <input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
-          placeholder="Nhập câu hỏi hoặc dán trực tiếp ảnh màn hình (Ctrl+V)..."
-          className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-500"
-        />
-        <button
-          onClick={sendMessage}
-          disabled={loading || (!input.trim() && !attachedImage)}
-          className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl font-bold text-sm shrink-0"
-        >
-          Gửi
-        </button>
+        {/* Danh sách các đoạn chat */}
+        <div className="flex-1 overflow-y-auto space-y-1.5 pr-1 custom-scrollbar">
+          {sessions.map((s) => {
+            const isActive = s.id === activeSession.id;
+            const turnCount = s.messages?.filter((m) => m.role === 'user').length || 0;
+            return (
+              <div
+                key={s.id}
+                onClick={() => setActiveSessionId(s.id)}
+                className={`group flex items-center justify-between p-2.5 rounded-xl cursor-pointer text-xs transition-all border ${
+                  isActive
+                    ? 'bg-indigo-600/20 border-indigo-500/50 text-white font-semibold shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border-transparent'
+                }`}
+              >
+                <div className="flex items-center gap-2.5 min-w-0 flex-1 mr-1">
+                  <MessageSquare
+                    className={`w-3.5 h-3.5 shrink-0 ${
+                      isActive ? 'text-cyan-400' : 'text-slate-500 group-hover:text-slate-400'
+                    }`}
+                  />
+                  <div className="flex flex-col min-w-0">
+                    <span className="truncate block leading-tight">{s.title || 'Đoạn chat'}</span>
+                    <span className="text-[10px] text-slate-500 mt-0.5">
+                      {turnCount > 0 ? `${turnCount} câu hỏi` : 'Mới tạo'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Nút xóa đoạn chat */}
+                <button
+                  onClick={(e) => handleDeleteSession(e, s.id)}
+                  className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-red-500/20 text-slate-400 hover:text-red-400 rounded-lg transition-all shrink-0 cursor-pointer"
+                  title="Xóa đoạn chat này"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* 2. KHUNG NỘI DUNG CHAT CHÍNH */}
+      <div className="flex-1 flex flex-col min-w-0 h-full">
+        {/* Header trên */}
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-3 pb-3 border-b border-slate-800">
+          <div className="flex items-center gap-2.5 min-w-0">
+            {!showHistory && (
+              <button
+                onClick={() => setShowHistory(true)}
+                className="p-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 hover:text-cyan-400 rounded-xl transition-all flex items-center gap-1.5 text-xs font-medium cursor-pointer"
+                title="Mở thanh lịch sử chat"
+              >
+                <History className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Lịch sử ({sessions.length})</span>
+              </button>
+            )}
+
+            <div className="flex items-center gap-2 min-w-0">
+              <h2 className="text-base sm:text-lg font-bold truncate text-slate-100 max-w-[200px] sm:max-w-xs">
+                {activeSession.title || 'AI Chatbot Gia Sư'}
+              </h2>
+              <span className="text-[11px] text-cyan-300 bg-cyan-500/10 border border-cyan-500/30 px-2.5 py-0.5 rounded-full font-medium hidden sm:flex items-center gap-1.5 shrink-0">
+                <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+                {userTurnCount} lượt
+              </span>
+            </div>
+
+            <button
+              onClick={() => {
+                const next = thinkingMode === 'deep' ? 'fast' : 'deep';
+                setThinkingMode(next);
+                setActiveThinkingMode(next);
+              }}
+              className={`text-[11px] px-2.5 py-1 rounded-full font-semibold flex items-center gap-1.5 border transition-all cursor-pointer shrink-0 ${
+                thinkingMode === 'deep'
+                  ? 'bg-purple-500/20 text-purple-300 border-purple-500/40 shadow-sm shadow-purple-500/20'
+                  : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-slate-200'
+              }`}
+              title="Bật/Tắt chế độ Tư duy sâu (Thinking Budget tối đa cho bài khó)"
+            >
+              <span>{thinkingMode === 'deep' ? '🧠 Tư duy sâu: BẬT' : '⚡ Nhanh (Low Budget)'}</span>
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={handleCreateNewChat}
+              className="text-xs text-cyan-300 hover:text-white bg-cyan-950/40 hover:bg-cyan-900/60 px-3 py-1.5 rounded-xl border border-cyan-500/30 flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
+              title="Tạo phiên trò chuyện mới"
+            >
+              <Plus className="w-3.5 h-3.5 text-cyan-400" />
+              <span>Đoạn chat mới</span>
+            </button>
+            <button
+              onClick={handleSaveToCloud}
+              className="text-xs text-amber-300 hover:text-white bg-amber-950/40 hover:bg-amber-900/60 px-3 py-1.5 rounded-xl border border-amber-500/30 flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
+              title="Lưu phiên trò chuyện này lên Firebase Cloud"
+            >
+              <Cloud className="w-3.5 h-3.5 text-amber-400" />
+              <span className="hidden sm:inline">Lưu Cloud</span>
+            </button>
+            <span className="text-xs text-slate-400 hidden md:flex items-center gap-1.5 bg-slate-900/60 px-3 py-1.5 rounded-xl border border-slate-700">
+              📋 Ctrl+V dán ảnh
+            </span>
+          </div>
+        </div>
+
+        {/* Danh sách tin nhắn */}
+        <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+          {messages.map((m, i) => (
+            <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+              <div
+                className={`max-w-2xl p-4 rounded-2xl text-sm ${
+                  m.role === 'user' ? 'bg-indigo-600 text-white' : 'bg-slate-800/90 border border-slate-700'
+                }`}
+              >
+                {m.image && (
+                  <img
+                    src={m.image}
+                    alt="Ảnh gửi kèm"
+                    className="max-w-xs max-h-60 rounded-xl mb-3 object-contain bg-black/40 border border-white/20 cursor-pointer"
+                    onClick={() => window.open(m.image, '_blank')}
+                    title="Bấm để xem ảnh phóng to"
+                  />
+                )}
+                {m.text && <div dangerouslySetInnerHTML={{ __html: renderMarkdownWithMath(m.text) }} />}
+              </div>
+            </div>
+          ))}
+          {loading && (
+            <div className="text-purple-300 text-xs flex items-center gap-2 animate-pulse py-2 px-3 rounded-xl bg-purple-950/30 border border-purple-500/20 w-fit">
+              <span className="w-2 h-2 rounded-full bg-purple-400 animate-ping" />
+              <span>
+                {thinkingMode === 'deep'
+                  ? '🧠 Đang dùng Thinking Budget tối đa: AI đang lập luận đa bước và kiểm tra bẫy...'
+                  : '⚡ AI đang soạn câu trả lời...'}
+              </span>
+            </div>
+          )}
+          <div ref={messagesEndRef} />
+        </div>
+
+        {/* Thumbnail ảnh đính kèm */}
+        {attachedImage && (
+          <div className="mt-3 flex items-center gap-3 p-2.5 bg-slate-900/90 border border-indigo-500/40 rounded-xl w-fit animate-fadeIn">
+            <img
+              src={attachedImage.url}
+              alt="Preview"
+              className="w-14 h-14 object-cover rounded-lg border border-indigo-400/50"
+            />
+            <div className="text-xs">
+              <p className="text-cyan-300 font-semibold flex items-center gap-1">📸 Đã đính kèm ảnh</p>
+              <p className="text-slate-400 text-[11px]">Sẵn sàng gửi (nhập câu hỏi hoặc bấm Gửi)</p>
+            </div>
+            <button
+              onClick={() => setAttachedImage(null)}
+              className="p-1.5 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-red-400 transition-colors ml-2 cursor-pointer"
+              title="Xóa ảnh này"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
+        {/* Khung nhập tin nhắn */}
+        <div className="mt-4 flex gap-3 items-center">
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileSelect}
+            accept="image/*"
+            className="hidden"
+          />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="p-3 bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-xl text-slate-300 hover:text-cyan-400 transition-all flex items-center justify-center shrink-0 cursor-pointer"
+            title="Tải ảnh lên hoặc bấm Ctrl+V để dán ảnh màn hình"
+          >
+            <ImageIcon className="w-5 h-5" />
+          </button>
+
+          <input
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
+            placeholder="Nhập câu hỏi hoặc dán trực tiếp ảnh màn hình (Ctrl+V)..."
+            className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-500"
+          />
+          <button
+            onClick={sendMessage}
+            disabled={loading || (!input.trim() && !attachedImage)}
+            className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl font-bold text-sm shrink-0 cursor-pointer"
+          >
+            Gửi
+          </button>
+        </div>
       </div>
     </div>
   );

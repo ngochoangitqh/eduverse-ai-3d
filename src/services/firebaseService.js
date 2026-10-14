@@ -195,6 +195,43 @@ export const getSavedChatSessionsFromCloud = async (maxCount = 10) => {
 };
 
 /**
+ * Cập nhật phiên chat đã có trên Firestore
+ */
+export const updateChatSessionInCloud = async (sessionId, chatMessages, title = null) => {
+  const user = getCurrentUser();
+  if (!user || !db || !sessionId) return;
+
+  try {
+    const docRef = doc(db, 'users', user.uid, 'chats', sessionId);
+    const dataToUpdate = {
+      messages: chatMessages,
+      turnCount: chatMessages.length,
+      updatedAt: serverTimestamp(),
+    };
+    if (title) dataToUpdate.title = title;
+    await setDoc(docRef, dataToUpdate, { merge: true });
+  } catch (err) {
+    console.error('Lỗi cập nhật phiên chat trên Firestore:', err);
+  }
+};
+
+/**
+ * Xóa một phiên chat trên Firestore
+ */
+export const deleteChatSessionFromCloud = async (sessionId) => {
+  const user = getCurrentUser();
+  if (!user || !db || !sessionId) return;
+
+  try {
+    const docRef = doc(db, 'users', user.uid, 'chats', sessionId);
+    await deleteDoc(docRef);
+  } catch (err) {
+    console.error('Lỗi xóa lịch sử chat trên Firestore:', err);
+    throw err;
+  }
+};
+
+/**
  * Lưu bộ từ vựng 3D / Flashcard vào Firestore
  */
 export const saveFlashcardsToCloud = async (topic, cards) => {
