@@ -3,6 +3,16 @@ import { getAuth, GoogleAuthProvider } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 
+export const DEFAULT_FIREBASE_CONFIG = {
+  apiKey: "AIzaSyAbDr7qB_SfVZHLT1qfnN0PnBjGTicOPGg",
+  authDomain: "eduverse-ai-3d.firebaseapp.com",
+  projectId: "eduverse-ai-3d",
+  storageBucket: "eduverse-ai-3d.firebasestorage.app",
+  messagingSenderId: "1045705107958",
+  appId: "1:1045705107958:web:850388673379b27837bfd7",
+  measurementId: "G-4TH2V8FMV6"
+};
+
 /**
  * Lấy cấu hình Firebase từ localStorage hoặc biến môi trường .env (Vite)
  */
@@ -17,7 +27,7 @@ export function getFirebaseConfig() {
     } catch (_) {}
   }
 
-  return {
+  const envConfig = {
     apiKey: import.meta.env.VITE_FIREBASE_API_KEY || '',
     authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || '',
     projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || '',
@@ -26,6 +36,12 @@ export function getFirebaseConfig() {
     appId: import.meta.env.VITE_FIREBASE_APP_ID || '',
     measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || '',
   };
+
+  if (envConfig.apiKey && envConfig.projectId) {
+    return envConfig;
+  }
+
+  return DEFAULT_FIREBASE_CONFIG;
 }
 
 export function parseFirebaseSnippet(snippet) {
