@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import {
   Compass, Bot, Calculator, Presentation, FileText,
-  Mic, HelpCircle, GitBranch, Map, Globe, Box, Key
+  Mic, HelpCircle, GitBranch, Map, Globe, Box, Key, User
 } from 'lucide-react';
 import { getActiveModel, setActiveModel, getActiveThinkingMode, setActiveThinkingMode } from '../../services/geminiService';
 
-export default function Sidebar({ activeTab, setActiveTab, onOpenApiKey, currentUser }) {
+export default function Sidebar({ activeTab, setActiveTab, onOpenApiKey, onOpenAuth, currentUser }) {
   const [model, setModel] = useState(getActiveModel());
   const [thinkingMode, setThinkingMode] = useState(getActiveThinkingMode());
 
@@ -133,31 +133,39 @@ export default function Sidebar({ activeTab, setActiveTab, onOpenApiKey, current
 
         {currentUser ? (
           <div
-            onClick={onOpenApiKey}
+            onClick={onOpenAuth}
             className="p-2 rounded-xl bg-slate-950/80 border border-emerald-500/30 flex items-center gap-2 cursor-pointer hover:bg-slate-900 transition-all"
-            title="Bấm để xem tài khoản và cài đặt"
+            title="Bấm để xem hồ sơ học viên & đăng xuất"
           >
             {currentUser.photoURL ? (
-              <img src={currentUser.photoURL} alt="Avatar" className="w-7 h-7 rounded-full border border-emerald-400" />
+              <img src={currentUser.photoURL} alt="Avatar" className="w-7 h-7 rounded-full border border-emerald-400 shrink-0" />
             ) : (
-              <div className="w-7 h-7 rounded-full bg-indigo-600 flex items-center justify-center text-xs font-bold text-white">
+              <div className="w-7 h-7 rounded-full bg-indigo-600 flex items-center justify-center text-xs font-bold text-white shrink-0">
                 {(currentUser.displayName || currentUser.email || 'U')[0].toUpperCase()}
               </div>
             )}
             <div className="flex-1 overflow-hidden">
               <p className="text-[11px] font-semibold text-white truncate">{currentUser.displayName || 'Học viên'}</p>
-              <p className="text-[9px] text-emerald-400 truncate">🔥 Đã kết nối Firebase</p>
+              <p className="text-[9px] text-emerald-400 truncate">🔥 Đã kết nối Cloud</p>
             </div>
           </div>
         ) : (
           <button
-            onClick={onOpenApiKey}
-            className="w-full py-1.5 px-3 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-[11px] text-slate-300 flex items-center justify-center gap-1.5 border border-slate-700"
+            onClick={onOpenAuth}
+            className="w-full py-2 px-3 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-xs font-bold text-white flex items-center justify-center gap-2 shadow-md cursor-pointer transition-all"
           >
-            <Key className="w-3.5 h-3.5 text-cyan-400" />
-            <span>Cài đặt Gemini & Firebase</span>
+            <User className="w-3.5 h-3.5" />
+            <span>Đăng Nhập / Đăng Ký</span>
           </button>
         )}
+
+        <button
+          onClick={onOpenApiKey}
+          className="w-full py-1.5 px-3 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-[11px] text-slate-300 flex items-center justify-center gap-1.5 border border-slate-700 cursor-pointer transition-all"
+        >
+          <Key className="w-3.5 h-3.5 text-cyan-400" />
+          <span>Cài đặt Gemini & Firebase</span>
+        </button>
       </div>
     </aside>
   );

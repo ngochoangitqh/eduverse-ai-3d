@@ -8,6 +8,7 @@ import {
   signOut,
   onAuthStateChanged,
   updateProfile,
+  sendPasswordResetEmail,
 } from 'firebase/auth';
 import {
   collection,
@@ -75,6 +76,38 @@ export const subscribeToAuthChanges = (callback) => {
 
 export const getCurrentUser = () => {
   return auth?.currentUser || null;
+};
+
+export const resetUserPassword = async (email) => {
+  if (!auth) {
+    throw new Error('Firebase chưa được cấu hình!');
+  }
+  await sendPasswordResetEmail(auth, email);
+};
+
+export const formatAuthError = (err) => {
+  const code = err?.code || '';
+  switch (code) {
+    case 'auth/invalid-email':
+      return 'Email không hợp lệ hoặc sai định dạng!';
+    case 'auth/user-not-found':
+      return 'Không tìm thấy tài khoản nào khớp với Email này!';
+    case 'auth/wrong-password':
+    case 'auth/invalid-credential':
+      return 'Email hoặc mật khẩu không chính xác!';
+    case 'auth/email-already-in-use':
+      return 'Email này đã được đăng ký tài khoản trước đó!';
+    case 'auth/weak-password':
+      return 'Mật khẩu quá ngắn hoặc quá yếu! Vui lòng đặt tối thiểu 6 ký tự.';
+    case 'auth/popup-closed-by-user':
+      return 'Cửa sổ đăng nhập Google đã bị đóng trước khi xác thực hoàn tất.';
+    case 'auth/operation-not-allowed':
+      return 'Phương thức đăng nhập này chưa được kích hoạt trong Firebase Console (Authentication > Sign-in method).';
+    case 'auth/too-many-requests':
+      return 'Quá nhiều yêu cầu không hợp lệ. Vui lòng thử lại sau ít phút!';
+    default:
+      return err?.message || 'Đã có lỗi xảy ra trong quá trình xác thực.';
+  }
 };
 
 /**

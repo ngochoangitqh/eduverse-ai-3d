@@ -9,6 +9,7 @@ import KnowledgeCore3D from './components/three/KnowledgeCore3D';
 import TiltCard from './components/three/TiltCard';
 import Sidebar from './components/layout/Sidebar';
 import EnglishCenterView from './components/english/EnglishCenterView';
+import AuthModal from './components/auth/AuthModal';
 import {
   ChatbotView, SolverView, SlideGenView, SummarizerView,
   MeetingTrackerView, QuizMakerView, MindmapView, RoadmapView
@@ -24,6 +25,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [englishMode, setEnglishMode] = useState('IELTS');
   const [showKeyModal, setShowKeyModal] = useState(false);
+  const [showAuthModal, setShowAuthModal] = useState(false);
   const [modalTab, setModalTab] = useState('gemini'); // 'gemini' | 'firebase'
   const [apiKey, setApiKey] = useState(localStorage.getItem('GEMINI_API_KEY') || '');
   const [firebaseSnippet, setFirebaseSnippet] = useState('');
@@ -81,6 +83,7 @@ export default function App() {
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         onOpenApiKey={() => setShowKeyModal(true)}
+        onOpenAuth={() => setShowAuthModal(true)}
         currentUser={currentUser}
       />
 
@@ -352,6 +355,17 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* Modal đăng nhập / đăng ký / tài khoản */}
+      <AuthModal
+        isOpen={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+        currentUser={currentUser}
+        onOpenConfig={() => {
+          setShowKeyModal(true);
+          setModalTab('firebase');
+        }}
+      />
     </div>
   );
 }
