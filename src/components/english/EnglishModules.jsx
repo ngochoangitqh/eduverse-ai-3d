@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Type } from '@google/genai';
 import { renderMarkdownWithMath } from '../../utils/mathRenderer';
 import { generateText, generateJSON, formatAIError } from '../../services/geminiService';
+import { ENGLISH_SPEAKING_SYSTEM_INSTRUCTION, ENGLISH_WRITING_SYSTEM_INSTRUCTION, ENGLISH_GRAMMAR_SYSTEM_INSTRUCTION } from '../../config/systemInstructions';
 import { speakText, createSpeechRecognizer } from '../../services/speechService';
 
 // 9. AI CHẤM ĐIỂM PHÁT ÂM
@@ -31,7 +32,8 @@ export function SpeakingCoachView({ englishMode }) {
     setLoading(true);
     try {
       const res = await generateText(
-        `Chế độ luyện thi: ${englishMode}. Câu mẫu: "${targetSentence}". Người học đọc được nhận diện là: "${spokenText}". Hãy chấm điểm phát âm trên thang 100%, chỉ ra các từ phát âm lệch và hướng dẫn cách đặt khẩu hình miệng/trọng âm bằng tiếng Việt.`
+        `Chế độ luyện thi: ${englishMode}.\nCâu mẫu: "${targetSentence}"\nNgười học đọc được nhận diện là: "${spokenText}".\nHãy đánh giá chi tiết phát âm.`,
+        ENGLISH_SPEAKING_SYSTEM_INSTRUCTION
       );
       setFeedback(res);
     } catch (e) {
@@ -179,8 +181,8 @@ export function WritingGraderView({ englishMode }) {
     setLoading(true);
     try {
       const res = await generateText(
-        `Bạn là giám khảo chấm thi ${englishMode} Writing. Hãy chấm bài viết sau theo 4 tiêu chí chuẩn, chỉ rõ từng lỗi sai ngữ pháp/từ vựng và viết lại 1 phiên bản nâng cấp đạt điểm tối đa:
-${essay}`
+        `Chế độ thi: ${englishMode} Writing.\nBài viết của học viên:\n${essay}`,
+        ENGLISH_WRITING_SYSTEM_INSTRUCTION
       );
       setResult(res);
     } catch (e) {
@@ -223,8 +225,8 @@ export function GrammarView({ englishMode }) {
     setLoading(true);
     try {
       const res = await generateText(
-        `Giải thích chi tiết chủ điểm ngữ pháp hoặc phân tích cấu trúc câu sau theo định hướng ${englishMode} (Gồm: Công thức, Cách dùng, Ví dụ thực tế, Lỗi hay sai):
-${query}`
+        `Chủ điểm ngữ pháp / câu cần phân tích (${englishMode}):\n${query}`,
+        ENGLISH_GRAMMAR_SYSTEM_INSTRUCTION
       );
       setExplanation(res);
     } catch (e) {

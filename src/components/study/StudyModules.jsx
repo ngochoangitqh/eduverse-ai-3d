@@ -3,6 +3,7 @@ import { Type } from '@google/genai';
 import { renderMarkdownWithMath } from '../../utils/mathRenderer';
 import { Image as ImageIcon, X, Paperclip, Upload, RotateCcw } from 'lucide-react';
 import { generateText, generateStream, generateChatStream, generateJSON, formatAIError } from '../../services/geminiService';
+import { CHATBOT_SYSTEM_INSTRUCTION, SOLVER_SYSTEM_INSTRUCTION } from '../../config/systemInstructions';
 import { createSpeechRecognizer } from '../../services/speechService';
 
 function fileToBase64(file) {
@@ -89,7 +90,7 @@ export function ChatbotView() {
         messages, // Gửi kèm toàn bộ lịch sử các câu chat trước để nhớ ngữ cảnh
         newPrompt: promptText,
         imagePart,
-        systemInstruction: 'Bạn là Siêu Gia Sư AI thông minh. Đi thẳng vào giải quyết vấn đề, giải thích từng bước rõ ràng, chính xác. Luôn nhớ và liên kết chặt chẽ với ngữ cảnh các câu hỏi, lời giải và hình ảnh trong cuộc hội thoại trước đó. Không chào hỏi lặp đi lặp lại.',
+        systemInstruction: CHATBOT_SYSTEM_INSTRUCTION,
         onChunk: (currentText) => {
           if (!streamed) {
             streamed = true;
@@ -284,7 +285,7 @@ export function SolverView() {
       await generateStream(
         promptText,
         (text) => setSolution(text),
-        'Bạn là Siêu Gia Sư Giải Bài Tập. Đi thẳng vào bài giải, trình bày khoa học, từng bước rõ ràng, dễ hiểu.',
+        SOLVER_SYSTEM_INSTRUCTION,
         imagePart
       );
     } catch (e) {
