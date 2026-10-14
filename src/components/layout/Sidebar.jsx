@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   Compass, Bot, Calculator, Presentation, FileText,
-  Mic, HelpCircle, GitBranch, Map, Globe, Box, Key, User
+  Mic, HelpCircle, GitBranch, Map, Globe, Box, Key, User, BookOpen
 } from 'lucide-react';
 import { getActiveModel, setActiveModel, getActiveThinkingMode, setActiveThinkingMode } from '../../services/geminiService';
 
@@ -21,6 +21,7 @@ export default function Sidebar({ activeTab, setActiveTab, onOpenApiKey, onOpenA
   const mainNav = [
     { id: 'dashboard', label: 'Tổng Quan 3D', icon: Compass, color: 'text-indigo-400' },
     { id: 'chatbot', label: 'AI Chatbot Gia Sư', icon: Bot, color: 'text-cyan-400' },
+    { id: 'rag', label: 'Kho Sách & RAG Tri Thức', icon: BookOpen, color: 'text-violet-400' },
     { id: 'solver', label: 'Giải Bài Tập (Ảnh/Chữ)', icon: Calculator, color: 'text-emerald-400' },
   ];
 

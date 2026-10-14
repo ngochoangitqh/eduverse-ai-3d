@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   Sparkles, MessageSquare, Mic, Layers, Camera,
   Presentation, Zap, Ear, Network, Languages, Key,
-  Flame, CheckCircle, AlertCircle, LogIn, LogOut, User
+  Flame, CheckCircle, AlertCircle, LogIn, LogOut, User, BookOpen
 } from 'lucide-react';
 import NeuralBackground3D from './components/three/NeuralBackground3D';
 import KnowledgeCore3D from './components/three/KnowledgeCore3D';
@@ -10,6 +10,7 @@ import TiltCard from './components/three/TiltCard';
 import Sidebar from './components/layout/Sidebar';
 import EnglishCenterView from './components/english/EnglishCenterView';
 import AuthModal from './components/auth/AuthModal';
+import RAGKnowledgeView from './components/study/RAGKnowledgeView';
 import {
   ChatbotView, SolverView, SlideGenView, SummarizerView,
   MeetingTrackerView, QuizMakerView, MindmapView, RoadmapView
@@ -109,13 +110,19 @@ export default function App() {
                   <div className="flex flex-wrap gap-3 pt-2">
                     <button
                       onClick={() => setActiveTab('chatbot')}
-                      className="glow-btn px-5 py-2.5 rounded-xl font-semibold text-sm text-white flex items-center gap-2"
+                      className="glow-btn px-5 py-2.5 rounded-xl font-semibold text-sm text-white flex items-center gap-2 cursor-pointer"
                     >
                       <MessageSquare className="w-4 h-4" /> Hỏi Gia Sư Ngay
                     </button>
                     <button
+                      onClick={() => setActiveTab('rag')}
+                      className="px-5 py-2.5 rounded-xl font-semibold text-sm bg-gradient-to-r from-purple-900/60 to-indigo-900/60 hover:from-purple-800/80 hover:to-indigo-800/80 border border-purple-500/40 text-purple-200 flex items-center gap-2 transition-all cursor-pointer shadow-sm"
+                    >
+                      <BookOpen className="w-4 h-4 text-purple-300" /> Sách Giáo Khoa RAG
+                    </button>
+                    <button
                       onClick={() => setActiveTab('english')}
-                      className="px-5 py-2.5 rounded-xl font-semibold text-sm bg-slate-800/90 hover:bg-slate-700/90 border border-cyan-500/30 text-cyan-300 flex items-center gap-2 transition-all"
+                      className="px-5 py-2.5 rounded-xl font-semibold text-sm bg-slate-800/90 hover:bg-slate-700/90 border border-cyan-500/30 text-cyan-300 flex items-center gap-2 transition-all cursor-pointer"
                     >
                       <Mic className="w-4 h-4" /> Luyện Tiếng Anh AI
                     </button>
@@ -200,6 +207,7 @@ export default function App() {
         )}
 
         {activeTab === 'chatbot' && <ChatbotView />}
+        {activeTab === 'rag' && <RAGKnowledgeView />}
         {activeTab === 'solver' && <SolverView />}
         {activeTab === 'slides' && <SlideGenView />}
         {activeTab === 'summarizer' && <SummarizerView />}

@@ -3,7 +3,7 @@ import { Type } from '@google/genai';
 import { renderMarkdownWithMath } from '../../utils/mathRenderer';
 import {
   Image as ImageIcon, X, Paperclip, Upload, RotateCcw, Cloud,
-  Plus, Trash2, MessageSquare, History, ChevronLeft, ChevronRight
+  Plus, Trash2, MessageSquare, History, ChevronLeft, ChevronRight, BookOpen
 } from 'lucide-react';
 import { generateText, generateStream, generateChatStream, generateJSON, formatAIError, getActiveThinkingMode, setActiveThinkingMode } from '../../services/geminiService';
 import { CHATBOT_SYSTEM_INSTRUCTION, SOLVER_SYSTEM_INSTRUCTION } from '../../config/systemInstructions';
@@ -15,6 +15,12 @@ import {
   deleteChatSessionFromCloud,
   getCurrentUser
 } from '../../services/firebaseService';
+import {
+  getStoredDocuments,
+  getAllActiveChunks,
+  searchRelevantChunks,
+  buildRAGContextPrompt
+} from '../../services/ragService';
 
 function fileToBase64(file) {
   return new Promise((resolve, reject) => {
@@ -67,6 +73,7 @@ export function ChatbotView() {
   const [attachedImage, setAttachedImage] = useState(null);
   const [loading, setLoading] = useState(false);
   const [thinkingMode, setThinkingMode] = useState(getActiveThinkingMode());
+  const [ragEnabled, setRagEnabled] = useState(true);
 
   const fileInputRef = useRef(null);
   const messagesEndRef = useRef(null);
@@ -213,7 +220,25 @@ export function ChatbotView() {
         }
       : null;
 
-    const promptText = userMsg || 'Hãy phân tích, giải thích hoặc giải chi tiết đề bài/nội dung trong hình ảnh này giúp mình.';
+    // Tự động tìm kiếm trong Kho Sách RAG nếu tính năng đang bật
+    let ragContext = '';
+    if (ragEnabled && userMsg) {
+      try {
+        const docs = getStoredDocuments();
+        const activeChunks = getAllActiveChunks(docs);
+        if (activeChunks.length > 0) {
+          const matched = searchRelevantChunks(userMsg, activeChunks, 3);
+          if (matched.length > 0 && matched[0].score > 3) {
+            ragContext = buildRAGContextPrompt(matched);
+          }
+        }
+      } catch (err) {
+        console.warn('Lỗi RAG search:', err);
+      }
+    }
+
+    const basePrompt = userMsg || 'Hãy phân tích, giải thích hoặc giải chi tiết đề bài/nội dung trong hình ảnh này giúp mình.';
+    const promptText = ragContext ? `${basePrompt}\n\n${ragContext}` : basePrompt;
 
     let streamed = false;
     try {
@@ -418,6 +443,19 @@ export function ChatbotView() {
               title="Bật/Tắt chế độ Tư duy sâu (Thinking Budget tối đa cho bài khó)"
             >
               <span>{thinkingMode === 'deep' ? '🧠 Tư duy sâu: BẬT' : '⚡ Nhanh (Low Budget)'}</span>
+            </button>
+
+            <button
+              onClick={() => setRagEnabled(!ragEnabled)}
+              className={`text-[11px] px-2.5 py-1 rounded-full font-semibold flex items-center gap-1.5 border transition-all cursor-pointer shrink-0 ${
+                ragEnabled
+                  ? 'bg-violet-500/20 text-violet-300 border-violet-500/40 shadow-sm shadow-violet-500/20'
+                  : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-slate-200'
+              }`}
+              title="Bật/Tắt tra cứu bám sát Kho Sách Giáo Khoa (RAG)"
+            >
+              <BookOpen className="w-3.5 h-3.5 text-violet-400" />
+              <span>{ragEnabled ? '📚 SGK RAG: BẬT' : '📚 SGK: TẮT'}</span>
             </button>
           </div>
 
