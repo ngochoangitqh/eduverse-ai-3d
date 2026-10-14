@@ -49,3 +49,21 @@ h1, h2, h3, .font-display {
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.4); }
 ::-webkit-scrollbar-thumb { background: rgba(99, 102, 241, 0.4); border-radius: 999px; }
+
+/* KaTeX math font styling for dark mode */
+.katex {
+  font-size: 1.05em;
+  color: #f1f5f9;
+}
+.katex-display {
+  margin: 0.85em 0 !important;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.6em 0.8em;
+  background: rgba(15, 23, 42, 0.6);
+  border-radius: 0.75rem;
+  border: 1px solid rgba(99, 102, 241, 0.2);
+}
+.katex-display > .katex {
+  color: #67e8f9;
+}

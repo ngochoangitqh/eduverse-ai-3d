@@ -296,7 +296,7 @@ export default function Sidebar({ activeTab, setActiveTab, onOpenApiKey }) {
           <span>Trạng thái AI Engine</span>
           <span className="flex items-center gap-1.5 text-emerald-400 font-medium">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-            Gemini 2.5 Flash
+            Gemini 3.8 Flash
           </span>
         </div>
         <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">

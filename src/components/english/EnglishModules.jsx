@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Type } from '@google/genai';
-import { marked } from 'marked';
-import { generateText, generateJSON } from '../../services/geminiService';
+import { renderMarkdownWithMath } from '../../utils/mathRenderer';
+import { generateText, generateJSON, formatAIError } from '../../services/geminiService';
 import { speakText, createSpeechRecognizer } from '../../services/speechService';
 
 // 9. AI CHẤM ĐIỂM PHÁT ÂM
@@ -35,7 +35,7 @@ export function SpeakingCoachView({ englishMode }) {
       );
       setFeedback(res);
     } catch (e) {
-      setFeedback('Lỗi: ' + e.message);
+      setFeedback('⚠️ ' + formatAIError(e));
     }
     setLoading(false);
   };
@@ -75,7 +75,7 @@ export function SpeakingCoachView({ englishMode }) {
 
       <div className="glass-panel rounded-2xl p-6 overflow-y-auto max-h-[75vh]">
         <h3 className="font-bold text-emerald-400 mb-3">Nhận Xét Phát Âm Từ AI Coach:</h3>
-        {feedback && <div className="prose prose-invert text-sm max-w-none" dangerouslySetInnerHTML={{ __html: marked.parse(feedback) }} />}
+        {feedback && <div className="prose prose-invert text-sm max-w-none" dangerouslySetInnerHTML={{ __html: renderMarkdownWithMath(feedback) }} />}
       </div>
     </div>
   );
@@ -112,7 +112,7 @@ export function Vocab3DView({ englishMode }) {
       setCards(data);
       setFlipped({});
     } catch (e) {
-      alert(e.message);
+      alert(formatAIError(e));
     }
     setLoading(false);
   };
@@ -184,7 +184,7 @@ ${essay}`
       );
       setResult(res);
     } catch (e) {
-      setResult('Lỗi: ' + e.message);
+      setResult('⚠️ ' + formatAIError(e));
     }
     setLoading(false);
   };
@@ -206,7 +206,7 @@ ${essay}`
       </div>
       <div className="glass-panel rounded-2xl p-6 overflow-y-auto max-h-[75vh]">
         <h3 className="font-bold text-emerald-400 mb-3">Báo Cáo Chấm Điểm Từ Giám Khảo AI:</h3>
-        {result && <div className="prose prose-invert text-sm max-w-none" dangerouslySetInnerHTML={{ __html: marked.parse(result) }} />}
+        {result && <div className="prose prose-invert text-sm max-w-none" dangerouslySetInnerHTML={{ __html: renderMarkdownWithMath(result) }} />}
       </div>
     </div>
   );
@@ -228,7 +228,7 @@ ${query}`
       );
       setExplanation(res);
     } catch (e) {
-      setExplanation('Lỗi: ' + e.message);
+      setExplanation('⚠️ ' + formatAIError(e));
     }
     setLoading(false);
   };
@@ -250,7 +250,7 @@ ${query}`
       </div>
       <div className="glass-panel rounded-2xl p-6 overflow-y-auto max-h-[75vh]">
         <h3 className="font-bold text-emerald-400 mb-3">Bài Giảng Ngữ Pháp AI:</h3>
-        {explanation && <div className="prose prose-invert text-sm max-w-none" dangerouslySetInnerHTML={{ __html: marked.parse(explanation) }} />}
+        {explanation && <div className="prose prose-invert text-sm max-w-none" dangerouslySetInnerHTML={{ __html: renderMarkdownWithMath(explanation) }} />}
       </div>
     </div>
   );

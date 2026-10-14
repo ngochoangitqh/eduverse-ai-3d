@@ -1,53 +1,201 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Type } from '@google/genai';
-import { marked } from 'marked';
-import { generateText, generateJSON } from '../../services/geminiService';
+import { renderMarkdownWithMath } from '../../utils/mathRenderer';
+import { Image as ImageIcon, X, Paperclip, Upload } from 'lucide-react';
+import { generateText, generateStream, generateJSON, formatAIError } from '../../services/geminiService';
 import { createSpeechRecognizer } from '../../services/speechService';
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result;
+      const base64 = typeof result === 'string' ? result.split(',')[1] : '';
+      resolve({ base64, mimeType: file.type || 'image/png', url: result });
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
 
 // 1. CHATBOT GIA SƯ
 export function ChatbotView() {
   const [messages, setMessages] = useState([
-    { role: 'ai', text: 'Xin chào! Mình là Gia sư AI 3D. Bạn cần giải đáp bài tập hay lý thuyết môn nào?' }
+    { role: 'ai', text: 'Xin chào! Mình là Gia sư AI. Bạn có thể gõ câu hỏi hoặc dán trực tiếp ảnh chụp màn hình (Ctrl+V) vào đây nhé!' }
   ]);
   const [input, setInput] = useState('');
+  const [attachedImage, setAttachedImage] = useState(null);
   const [loading, setLoading] = useState(false);
+  const fileInputRef = useRef(null);
+
+  const handlePaste = async (e) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type && items[i].type.startsWith('image/')) {
+        const file = items[i].getAsFile();
+        if (file) {
+          e.preventDefault();
+          const imgData = await fileToBase64(file);
+          setAttachedImage(imgData);
+          break;
+        }
+      }
+    }
+  };
+
+  const handleFileSelect = async (e) => {
+    const file = e.target.files?.[0];
+    if (file && file.type.startsWith('image/')) {
+      const imgData = await fileToBase64(file);
+      setAttachedImage(imgData);
+    }
+    e.target.value = '';
+  };
 
   const sendMessage = async () => {
-    if (!input.trim() || loading) return;
-    const userMsg = input;
+    if ((!input.trim() && !attachedImage) || loading) return;
+    const userMsg = input.trim();
+    const currentImg = attachedImage;
+
     setInput('');
-    setMessages((prev) => [...prev, { role: 'user', text: userMsg }]);
+    setAttachedImage(null);
+
+    setMessages((prev) => [
+      ...prev,
+      {
+        role: 'user',
+        text: userMsg || '(Đã gửi ảnh chụp màn hình)',
+        image: currentImg?.url
+      }
+    ]);
     setLoading(true);
+
+    const imagePart = currentImg
+      ? {
+          inlineData: {
+            data: currentImg.base64,
+            mimeType: currentImg.mimeType,
+          },
+        }
+      : null;
+
+    const promptText = userMsg || 'Hãy phân tích, giải thích hoặc giải chi tiết đề bài/nội dung trong hình ảnh này giúp mình.';
+
+    let streamed = false;
     try {
-      const reply = await generateText(userMsg, 'Bạn là Siêu Gia Sư AI nhiệt tình, giải thích từng bước dễ hiểu bằng tiếng Việt.');
-      setMessages((prev) => [...prev, { role: 'ai', text: reply }]);
+      await generateStream(
+        promptText,
+        (currentText) => {
+          if (!streamed) {
+            streamed = true;
+            setLoading(false);
+            setMessages((prev) => [...prev, { role: 'ai', text: currentText }]);
+          } else {
+            setMessages((prev) => {
+              const updated = [...prev];
+              updated[updated.length - 1] = { role: 'ai', text: currentText };
+              return updated;
+            });
+          }
+        },
+        'Bạn là Siêu Gia Sư AI thông minh. Đi thẳng vào giải quyết vấn đề, giải thích từng bước rõ ràng, chính xác. Không chào hỏi lặp đi lặp lại.',
+        imagePart
+      );
     } catch (err) {
-      setMessages((prev) => [...prev, { role: 'ai', text: 'Lỗi: ' + err.message }]);
+      setMessages((prev) => [...prev, { role: 'ai', text: '⚠️ ' + formatAIError(err) }]);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (
-    <div className="glass-panel rounded-2xl p-6 flex flex-col h-[calc(100vh-7rem)]">
-      <h2 className="text-xl font-bold mb-4">🤖 AI Chatbot Gia Sư 24/7</h2>
+    <div
+      onPaste={handlePaste}
+      className="glass-panel rounded-2xl p-6 flex flex-col h-[calc(100vh-7rem)]"
+    >
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-xl font-bold">🤖 AI Chatbot Gia Sư 24/7</h2>
+        <span className="text-xs text-slate-400 flex items-center gap-1.5 bg-slate-900/60 px-3 py-1.5 rounded-lg border border-slate-700">
+          📋 Hỗ trợ dán ảnh (Ctrl+V)
+        </span>
+      </div>
+
       <div className="flex-1 overflow-y-auto space-y-4 pr-2">
         {messages.map((m, i) => (
           <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-2xl p-4 rounded-2xl text-sm ${m.role === 'user' ? 'bg-indigo-600 text-white' : 'bg-slate-800/90 border border-slate-700'}`}
-                 dangerouslySetInnerHTML={{ __html: marked.parse(m.text) }} />
+            <div className={`max-w-2xl p-4 rounded-2xl text-sm ${m.role === 'user' ? 'bg-indigo-600 text-white' : 'bg-slate-800/90 border border-slate-700'}`}>
+              {m.image && (
+                <img
+                  src={m.image}
+                  alt="Ảnh người dùng gửi"
+                  className="max-w-xs max-h-60 rounded-xl mb-3 object-contain bg-black/40 border border-white/20 cursor-pointer"
+                  onClick={() => window.open(m.image, '_blank')}
+                  title="Bấm để xem ảnh phóng to"
+                />
+              )}
+              {m.text && <div dangerouslySetInnerHTML={{ __html: renderMarkdownWithMath(m.text) }} />}
+            </div>
           </div>
         ))}
         {loading && <div className="text-cyan-400 text-sm animate-pulse">AI đang suy nghĩ...</div>}
       </div>
-      <div className="mt-4 flex gap-3">
+
+      {/* Thumbnail ảnh đã dán hoặc chọn trước khi gửi */}
+      {attachedImage && (
+        <div className="mt-3 flex items-center gap-3 p-2.5 bg-slate-900/90 border border-indigo-500/40 rounded-xl w-fit animate-fadeIn">
+          <img
+            src={attachedImage.url}
+            alt="Preview"
+            className="w-14 h-14 object-cover rounded-lg border border-indigo-400/50"
+          />
+          <div className="text-xs">
+            <p className="text-cyan-300 font-semibold flex items-center gap-1">
+              📸 Đã đính kèm ảnh
+            </p>
+            <p className="text-slate-400 text-[11px]">Sẵn sàng gửi (nhập thêm câu hỏi hoặc bấm Gửi)</p>
+          </div>
+          <button
+            onClick={() => setAttachedImage(null)}
+            className="p-1.5 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-red-400 transition-colors ml-2"
+            title="Xóa ảnh này"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      <div className="mt-4 flex gap-3 items-center">
+        <input
+          type="file"
+          ref={fileInputRef}
+          onChange={handleFileSelect}
+          accept="image/*"
+          className="hidden"
+        />
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          className="p-3 bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-xl text-slate-300 hover:text-cyan-400 transition-all flex items-center justify-center shrink-0"
+          title="Tải ảnh lên hoặc bấm Ctrl+V để dán ảnh màn hình"
+        >
+          <ImageIcon className="w-5 h-5" />
+        </button>
+
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
-          placeholder="Nhập câu hỏi học tập..."
-          className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm"
+          placeholder="Nhập câu hỏi hoặc dán trực tiếp ảnh màn hình (Ctrl+V)..."
+          className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-500"
         />
-        <button onClick={sendMessage} className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 rounded-xl font-bold text-sm">Gửi</button>
+        <button
+          onClick={sendMessage}
+          disabled={loading || (!input.trim() && !attachedImage)}
+          className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl font-bold text-sm shrink-0"
+        >
+          Gửi
+        </button>
       </div>
     </div>
   );
@@ -56,42 +204,133 @@ export function ChatbotView() {
 // 2. GIẢI BÀI TẬP AI
 export function SolverView() {
   const [problem, setProblem] = useState('');
+  const [attachedImage, setAttachedImage] = useState(null);
   const [solution, setSolution] = useState('');
   const [loading, setLoading] = useState(false);
+  const solverFileInputRef = useRef(null);
+
+  const handlePaste = async (e) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type && items[i].type.startsWith('image/')) {
+        const file = items[i].getAsFile();
+        if (file) {
+          e.preventDefault();
+          const imgData = await fileToBase64(file);
+          setAttachedImage(imgData);
+          break;
+        }
+      }
+    }
+  };
+
+  const handleFileSelect = async (e) => {
+    const file = e.target.files?.[0];
+    if (file && file.type.startsWith('image/')) {
+      const imgData = await fileToBase64(file);
+      setAttachedImage(imgData);
+    }
+    e.target.value = '';
+  };
 
   const handleSolve = async () => {
-    if (!problem.trim()) return;
+    if ((!problem.trim() && !attachedImage) || loading) return;
     setLoading(true);
+    setSolution('');
+
+    const imagePart = attachedImage
+      ? {
+          inlineData: {
+            data: attachedImage.base64,
+            mimeType: attachedImage.mimeType,
+          },
+        }
+      : null;
+
+    const promptText = `Giải chi tiết bài tập sau từng bước (Phương pháp, Lời giải, Đáp số): \n${problem || 'Đề bài nằm trong hình ảnh đính kèm.'}`;
+
     try {
-      const res = await generateText(
-        `Giải chi tiết bài tập sau từng bước (Phương pháp, Lời giải, Đáp số): 
-${problem}`
+      await generateStream(
+        promptText,
+        (text) => setSolution(text),
+        'Bạn là Siêu Gia Sư Giải Bài Tập. Đi thẳng vào bài giải, trình bày khoa học, từng bước rõ ràng, dễ hiểu.',
+        imagePart
       );
-      setSolution(res);
     } catch (e) {
-      setSolution('Lỗi: ' + e.message);
+      setSolution('⚠️ ' + formatAIError(e));
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6" onPaste={handlePaste}>
       <div className="glass-panel rounded-2xl p-6 space-y-4">
-        <h2 className="text-xl font-bold">📐 Giải Bài Tập Đa Môn</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl font-bold">📐 Giải Bài Tập Đa Môn</h2>
+          <span className="text-xs text-slate-400 bg-slate-900/60 px-3 py-1.5 rounded-lg border border-slate-700">
+            Dán ảnh đề bài (Ctrl+V)
+          </span>
+        </div>
+
+        {attachedImage && (
+          <div className="flex items-center gap-3 p-3 bg-slate-900/90 border border-emerald-500/40 rounded-xl">
+            <img
+              src={attachedImage.url}
+              alt="Problem preview"
+              className="w-16 h-16 object-cover rounded-lg border border-slate-700"
+            />
+            <div className="flex-1 text-xs">
+              <p className="text-emerald-400 font-semibold">📸 Đã đính kèm ảnh đề bài</p>
+              <p className="text-slate-400 text-[11px]">AI sẽ đọc và giải trực tiếp từ ảnh này</p>
+            </div>
+            <button
+              onClick={() => setAttachedImage(null)}
+              className="p-1.5 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-red-400 transition-colors"
+              title="Xóa ảnh"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
         <textarea
-          rows={8}
+          rows={7}
           value={problem}
           onChange={(e) => setProblem(e.target.value)}
-          placeholder="Dán đề bài Toán, Lý, Hóa, Lập trình C++, Java, Tiếng Anh vào đây..."
-          className="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-sm"
+          placeholder="Dán đề bài văn bản hoặc bấm Ctrl+V để dán trực tiếp ảnh chụp đề bài vào đây..."
+          className="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-sm focus:outline-none focus:border-indigo-500"
         />
-        <button onClick={handleSolve} disabled={loading} className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 rounded-xl font-bold">
-          {loading ? 'Đang giải bài...' : 'Giải Chi Tiết Từng Bước'}
-        </button>
+
+        <div className="flex gap-3">
+          <input
+            type="file"
+            ref={solverFileInputRef}
+            onChange={handleFileSelect}
+            accept="image/*"
+            className="hidden"
+          />
+          <button
+            type="button"
+            onClick={() => solverFileInputRef.current?.click()}
+            className="px-4 py-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-xs font-semibold text-slate-300 hover:text-white flex items-center gap-2"
+          >
+            <ImageIcon className="w-4 h-4 text-emerald-400" />
+            <span>Tải ảnh đề</span>
+          </button>
+          <button
+            onClick={handleSolve}
+            disabled={loading || (!problem.trim() && !attachedImage)}
+            className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl font-bold text-sm"
+          >
+            {loading ? 'Đang giải bài...' : 'Giải Chi Tiết Từng Bước'}
+          </button>
+        </div>
       </div>
       <div className="glass-panel rounded-2xl p-6 overflow-y-auto max-h-[75vh]">
         <h3 className="font-bold text-cyan-400 mb-3">Lời Giải Từ AI:</h3>
-        {solution ? <div className="prose prose-invert text-sm max-w-none" dangerouslySetInnerHTML={{ __html: marked.parse(solution) }} /> : <p className="text-slate-500 text-sm">Kết quả lời giải sẽ hiển thị tại đây.</p>}
+        {solution ? <div className="prose prose-invert text-sm max-w-none" dangerouslySetInnerHTML={{ __html: renderMarkdownWithMath(solution) }} /> : <p className="text-slate-500 text-sm">Kết quả lời giải sẽ hiển thị tại đây.</p>}
       </div>
     </div>
   );
@@ -124,7 +363,7 @@ export function SlideGenView() {
       setSlides(data);
       setCurrent(0);
     } catch (e) {
-      alert(e.message);
+      alert(formatAIError(e));
     }
     setLoading(false);
   };
@@ -184,7 +423,7 @@ export function SummarizerView() {
 ${content}`);
       setSummary(res);
     } catch (e) {
-      setSummary('Lỗi: ' + e.message);
+      setSummary('⚠️ ' + formatAIError(e));
     }
     setLoading(false);
   };
@@ -206,7 +445,7 @@ ${content}`);
       </div>
       <div className="glass-panel rounded-2xl p-6 overflow-y-auto max-h-[75vh]">
         <h3 className="font-bold text-cyan-400 mb-3">Bản Tóm Tắt Thông Minh:</h3>
-        {summary && <div className="prose prose-invert text-sm max-w-none" dangerouslySetInnerHTML={{ __html: marked.parse(summary) }} />}
+        {summary && <div className="prose prose-invert text-sm max-w-none" dangerouslySetInnerHTML={{ __html: renderMarkdownWithMath(summary) }} />}
       </div>
     </div>
   );
@@ -244,7 +483,7 @@ export function MeetingTrackerView() {
 ${transcript}`);
       setMinutes(res);
     } catch (e) {
-      setMinutes('Lỗi: ' + e.message);
+      setMinutes('⚠️ ' + formatAIError(e));
     }
     setLoading(false);
   };
@@ -271,7 +510,7 @@ ${transcript}`);
       </div>
       <div className="glass-panel rounded-2xl p-6 overflow-y-auto max-h-[75vh]">
         <h3 className="font-bold text-cyan-400 mb-3">Biên Bản Cuộc Họp AI:</h3>
-        {minutes && <div className="prose prose-invert text-sm max-w-none" dangerouslySetInnerHTML={{ __html: marked.parse(minutes) }} />}
+        {minutes && <div className="prose prose-invert text-sm max-w-none" dangerouslySetInnerHTML={{ __html: renderMarkdownWithMath(minutes) }} />}
       </div>
     </div>
   );
@@ -305,7 +544,7 @@ export function QuizMakerView() {
       setQuestions(data);
       setSelected({});
     } catch (e) {
-      alert(e.message);
+      alert(formatAIError(e));
     }
     setLoading(false);
   };
@@ -388,7 +627,7 @@ export function MindmapView() {
       const data = await generateJSON(`Tạo sơ đồ tư duy phân nhánh chi tiết cho chủ đề: "${topic}"`, schema);
       setMindmap(data);
     } catch (e) {
-      alert(e.message);
+      alert(formatAIError(e));
     }
     setLoading(false);
   };
@@ -458,7 +697,7 @@ export function RoadmapView() {
       const data = await generateJSON(`Thiết kế lộ trình học tập từng giai đoạn cho mục tiêu: "${goal}"`, schema);
       setRoadmap(data);
     } catch (e) {
-      alert(e.message);
+      alert(formatAIError(e));
     }
     setLoading(false);
   };

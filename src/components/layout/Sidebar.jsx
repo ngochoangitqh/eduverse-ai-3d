@@ -1,10 +1,17 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Compass, Bot, Calculator, Presentation, FileText,
   Mic, HelpCircle, GitBranch, Map, Globe, Box, Key
 } from 'lucide-react';
+import { getActiveModel, setActiveModel } from '../../services/geminiService';
 
 export default function Sidebar({ activeTab, setActiveTab, onOpenApiKey }) {
+  const [model, setModel] = useState(getActiveModel());
+
+  const handleModelChange = (newModel) => {
+    setModel(newModel);
+    setActiveModel(newModel);
+  };
   const mainNav = [
     { id: 'dashboard', label: 'Tổng Quan 3D', icon: Compass, color: 'text-indigo-400' },
     { id: 'chatbot', label: 'AI Chatbot Gia Sư', icon: Bot, color: 'text-cyan-400' },
@@ -82,12 +89,22 @@ export default function Sidebar({ activeTab, setActiveTab, onOpenApiKey }) {
 
       <div className="p-4 border-t border-slate-800/80 bg-slate-900/50 space-y-2.5">
         <div className="flex items-center justify-between text-xs text-slate-400">
-          <span>Trạng thái AI Engine</span>
-          <span className="flex items-center gap-1.5 text-emerald-400 font-medium">
+          <span>AI Engine</span>
+          <span className="flex items-center gap-1.5 text-emerald-400 font-medium text-[11px]">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-            Gemini 2.5 Flash
+            Online
           </span>
         </div>
+
+        <select
+          value={model}
+          onChange={(e) => handleModelChange(e.target.value)}
+          className="w-full bg-slate-950 border border-slate-700/80 text-xs text-cyan-300 rounded-lg p-2 focus:outline-none focus:border-indigo-500 font-medium cursor-pointer"
+        >
+          <option value="gemini-3.5-flash-lite">⚡ 3.5 Flash-Lite (Khuyên dùng - Nhanh)</option>
+          <option value="gemini-3.8-flash">🧠 3.8 Flash (Tư duy sâu)</option>
+        </select>
+
         <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
           <div className="bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 h-full w-full" />
         </div>
