@@ -5,7 +5,7 @@ import {
   Image as ImageIcon, X, Paperclip, Upload, RotateCcw, Cloud,
   Plus, Trash2, MessageSquare, History, ChevronLeft, ChevronRight, BookOpen, Brain,
   FileText, FileUp, Sparkles, Copy, Check, Download, Volume2, Presentation, Loader2,
-  Layers, AlertCircle, FileCheck
+  Layers, AlertCircle, FileCheck, GraduationCap
 } from 'lucide-react';
 import { generateText, generateStream, generateChatStream, generateJSON, formatAIError, getActiveThinkingMode, setActiveThinkingMode } from '../../services/geminiService';
 import { CHATBOT_SYSTEM_INSTRUCTION, SOLVER_SYSTEM_INSTRUCTION } from '../../config/systemInstructions';
@@ -32,6 +32,12 @@ import {
   getStoredCollectiveInsights
 } from '../../services/collectiveLearningService';
 import CollectiveBrainModal from './CollectiveBrainModal';
+import StudentMemoryModal from './StudentMemoryModal';
+import {
+  getStudentProfile,
+  buildStudentMemoryContext,
+  autoDetectStudentHabit
+} from '../../services/studentMemoryService';
 import { GeneticExamGeneratorCSP, SAMPLE_QUESTION_BANK } from '../../services/aiAlgorithms/geneticExamGenerator';
 import { createSampleSemanticNetwork } from '../../services/aiAlgorithms/expertSystemSemanticNet';
 
@@ -143,6 +149,8 @@ export function ChatbotView() {
   const [showHistory, setShowHistory] = useState(true);
   const [showCollectiveBrain, setShowCollectiveBrain] = useState(false);
   const [collectiveCount, setCollectiveCount] = useState(() => getStoredCollectiveInsights().length);
+  const [showStudentMemory, setShowStudentMemory] = useState(false);
+  const [studentProfile, setStudentProfile] = useState(() => getStudentProfile(getCurrentUser()));
   const [input, setInput] = useState('');
   const [attachedImage, setAttachedImage] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -156,6 +164,7 @@ export function ChatbotView() {
   useEffect(() => {
     const unsub = subscribeToAuthChanges(async (user) => {
       setCurrentUser(user);
+      setStudentProfile(getStudentProfile(user));
 
       // Cập nhật sessions bằng hàm callback để giữ lại toàn bộ đoạn chat đang thực hiện
       setSessions((currentSessions) => {
@@ -415,9 +424,12 @@ export function ChatbotView() {
     let streamed = false;
     let finalAiAnswer = '';
     try {
-      // Kết hợp System Instruction chuẩn và Trí Tuệ Cộng Hưởng tích lũy từ tất cả học sinh
+      // Kết hợp System Instruction chuẩn, Bộ Nhớ Hồ Sơ Cá Nhân và Trí Tuệ Cộng Hưởng
       const collectiveWisdom = getCollectiveWisdomPrompt(6);
-      const dynamicSystemInstruction = CHATBOT_SYSTEM_INSTRUCTION + collectiveWisdom;
+      const studentMemoryContext = buildStudentMemoryContext(currentUser);
+      const dynamicSystemInstruction = CHATBOT_SYSTEM_INSTRUCTION +
+        (studentMemoryContext ? `\n\n${studentMemoryContext}` : '') +
+        collectiveWisdom;
 
       await generateChatStream({
         messages: updatedMessages,
@@ -459,6 +471,15 @@ export function ChatbotView() {
           .then((newInsight) => {
             if (newInsight) {
               setCollectiveCount(getStoredCollectiveInsights().length);
+            }
+          })
+          .catch(() => {});
+
+        // Tự động phát hiện thói quen, bẫy sai sót vào Hồ Sơ Cá Nhân
+        autoDetectStudentHabit(userMsg, finalAiAnswer, currentUser)
+          .then((newHabit) => {
+            if (newHabit) {
+              setStudentProfile(getStudentProfile(currentUser));
             }
           })
           .catch(() => {});
@@ -629,6 +650,15 @@ export function ChatbotView() {
             </div>
 
             <button
+              onClick={() => setShowStudentMemory(true)}
+              className="text-[11px] px-2.5 py-1 rounded-full font-semibold flex items-center gap-1.5 border transition-all cursor-pointer bg-gradient-to-r from-emerald-500/20 to-teal-500/20 text-emerald-300 border-emerald-500/40 hover:from-emerald-500/30 hover:to-teal-500/30 shadow-sm shrink-0"
+              title="Xem Hồ Sơ & Bộ Nhớ Cá Nhân: AI ghi nhớ học lực, mục tiêu, phong cách học và lỗi sai hay gặp để giảng dạy điêu luyện"
+            >
+              <GraduationCap className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
+              <span>Bộ Nhớ Học Tập ({studentProfile?.targetGoal ? studentProfile.targetGoal.split(' ')[0] : 'Cá Nhân'})</span>
+            </button>
+
+            <button
               onClick={() => setShowCollectiveBrain(true)}
               className="text-[11px] px-2.5 py-1 rounded-full font-semibold flex items-center gap-1.5 border transition-all cursor-pointer bg-gradient-to-r from-purple-500/20 to-pink-500/20 text-purple-300 border-purple-500/40 hover:from-purple-500/30 hover:to-pink-500/30 shadow-sm shrink-0"
               title="Xem Bộ Não Trí Tuệ Cộng Hưởng: AI học hỏi từ tất cả học sinh để trở nên thông minh hơn"
@@ -787,6 +817,13 @@ export function ChatbotView() {
         isOpen={showCollectiveBrain}
         onClose={() => setShowCollectiveBrain(false)}
       />
+
+      {/* Modal Hồ Sơ & Bộ Nhớ Cá Nhân Hóa */}
+      <StudentMemoryModal
+        isOpen={showStudentMemory}
+        onClose={() => setShowStudentMemory(false)}
+        onProfileUpdated={(updated) => setStudentProfile(updated)}
+      />
     </div>
   );
 }
@@ -843,11 +880,14 @@ export function SolverView() {
       ? `[YÊU CẦU: Vận dụng tối đa Thinking Budget để suy luận sâu và kiểm tra logic bài khó]\nGiải chi tiết bài tập sau từng bước (Phương pháp, Lời giải, Đáp số): \n${problem || 'Đề bài nằm trong hình ảnh đính kèm.'}`
       : `Giải chi tiết bài tập sau từng bước (Phương pháp, Lời giải, Đáp số): \n${problem || 'Đề bài nằm trong hình ảnh đính kèm.'}`;
 
+    const studentMemory = buildStudentMemoryContext(getCurrentUser());
+    const dynamicSolverInstruction = SOLVER_SYSTEM_INSTRUCTION + (studentMemory ? `\n\n${studentMemory}` : '');
+
     try {
       await generateStream(
         promptText,
         (text) => setSolution(text),
-        SOLVER_SYSTEM_INSTRUCTION,
+        dynamicSolverInstruction,
         imagePart,
         solverThinkingMode
       );
