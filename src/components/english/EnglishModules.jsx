@@ -6,235 +6,101 @@ import { ENGLISH_SPEAKING_SYSTEM_INSTRUCTION, ENGLISH_WRITING_SYSTEM_INSTRUCTION
 import { speakText, createSpeechRecognizer } from '../../services/speechService';
 
 import { 
-  Sparkles, RotateCw, Volume2, Mic, Shuffle, Languages, CheckCircle2, 
-  Target, Award, Volume1, ArrowRight, Loader2, BookOpen
+  Sparkles, RotateCw, Volume2, Mic, Languages, CheckCircle2, 
+  Target, Award, Volume1, ArrowRight, Loader2, BookOpen, History,
+  ChevronLeft, ChevronRight, SlidersHorizontal
 } from 'lucide-react';
 
-// Ngân hàng câu luyện phát âm tuyển chọn theo hệ đào tạo
-const PRACTICE_SENTENCE_BANKS = {
-  'IELTS': [
-    {
-      sentence: 'Artificial intelligence is transforming modern education and scientific research around the world.',
-      ipa: '/ˌɑːtɪˈfɪʃl ɪnˈtelɪdʒəns ɪz trænsˈfɔːmɪŋ ˈmɒdn ˌedʒuˈkeɪʃn ənd ˌsaɪənˈtɪfɪk rɪˈsɜːtʃ əˈraʊnd ðə wɜːld/',
-      translation: 'Trí tuệ nhân tạo đang biến đổi nền giáo dục hiện đại và nghiên cứu khoa học trên toàn thế giới.',
-      topic: 'Technology & Science',
-      focusSound: 'Liên kết âm & trọng âm từ đa âm tiết',
-      level: 'IELTS Band 7.5+'
-    },
-    {
-      sentence: 'The government should implement stringent environmental regulations to mitigate carbon emissions.',
-      ipa: '/ðə ˈɡʌvənmənt ʃʊd ˈɪmplɪment ˈstrɪndʒənt ɪnˌvaɪrənˈmentl ˌreɡjuˈleɪʃnz tu ˈmɪtɪɡeɪt ˈkɑːbən ɪˈmɪʃnz/',
-      translation: 'Chính phủ nên thực thi các quy định môi trường nghiêm ngặt để giảm thiểu lượng khí thải carbon.',
-      topic: 'Environment',
-      focusSound: 'Âm /str/, /dʒ/ và kết thúc /-ʃnz/',
-      level: 'IELTS Band 8.0+'
-    },
-    {
-      sentence: 'Technological advancements have undeniably enhanced human connectivity and global collaboration.',
-      ipa: '/ˌteknəˈlɒdʒɪkl ədˈvɑːnsmənts hæv ˌʌndɪˈnaɪəbli ɪnˈhɑːnst ˈhjuːmən kəˌnekˈtɪvəti ənd ˈɡləʊbl kəˌlæbəˈreɪʃn/',
-      translation: 'Những tiến bộ công nghệ rõ ràng đã tăng cường sự kết nối giữa con người và hợp tác toàn cầu.',
-      topic: 'Society & Tech',
-      focusSound: 'Trọng âm từ rơi vào âm tiết thứ 3 và 4',
-      level: 'IELTS Band 7.5+'
-    },
-    {
-      sentence: 'Preserving cultural heritage plays an indispensable role in maintaining national identity.',
-      ipa: '/prɪˈzɜːvɪŋ ˈkʌltʃərəl ˈherɪtɪdʒ pleɪz ən ˌɪndɪˈspensəbl rəʊl ɪn meɪnˈteɪnɪŋ ˈnæʃnəl aɪˈdentəti/',
-      translation: 'Bảo tồn di sản văn hóa đóng vai trò không thể thiếu trong việc duy trì bản sắc dân tộc.',
-      topic: 'Culture & Society',
-      focusSound: 'Âm /tʃ/, /dʒ/ và nhịp điệu ngắt nghỉ theo cụm ngữ pháp',
-      level: 'IELTS Band 8.0+'
-    },
-    {
-      sentence: 'Rapid urbanization has led to severe traffic congestion and housing shortages in metropolitan areas.',
-      ipa: '/ˈræpɪd ˌɜːbənaɪˈzeɪʃn hæz led tu sɪˈvɪə ˈtræfɪk kənˈdʒestʃən ənd ˈhaʊzɪŋ ˈʃɔːtɪdʒɪz ɪn ˌmetrəˈpɒlɪtən ˈeəriəz/',
-      translation: 'Quá trình đô thị hóa nhanh chóng đã dẫn đến ùn tắc giao thông nghiêm trọng và khan hiếm nhà ở.',
-      topic: 'Urban Planning',
-      focusSound: 'Ending sounds /-z/, /-ɪz/ và nguyên âm đôi /eə/',
-      level: 'IELTS Band 7.0+'
-    },
-    {
-      sentence: 'Fostering critical thinking skills is paramount for students navigating the digital information age.',
-      ipa: '/ˈfɒstərɪŋ ˈkrɪtɪkl ˈθɪŋkɪŋ skɪlz ɪz ˈpærəmaʊnt fɔː ˈstjuːdnts ˈnævɪɡeɪtɪŋ ðə ˈdɪdʒɪtl ˌɪnfəˈmeɪʃn eɪdʒ/',
-      translation: 'Rèn luyện tư duy phản biện là tối quan trọng đối với học sinh tiếp cận kỷ nguyên thông tin số.',
-      topic: 'Education',
-      focusSound: 'Âm vô thanh /θ/ trong "thinking" và /ŋ/ ending',
-      level: 'IELTS Band 7.5+'
-    },
-    {
-      sentence: 'Renewable energy sources offer sustainable and cost-effective alternatives to fossil fuels.',
-      ipa: '/rɪˈnjuːəbl ˈenədʒi ˈsɔːsɪz ˈɒfə səˈsteɪnəbl ənd kɒst ɪˈfektɪv ɔːlˈtɜːnətɪvz tu ˈfɒsl ˈfjuːəlz/',
-      translation: 'Các nguồn năng lượng tái tạo mang lại giải pháp bền vững và tiết kiệm thay thế nhiên liệu hóa thạch.',
-      topic: 'Energy & Climate',
-      focusSound: 'Âm /s/ và /z/ phân biệt rõ ràng',
-      level: 'IELTS Band 7.0+'
-    }
-  ],
-  'TOEIC': [
-    {
-      sentence: 'Please make sure to submit your quarterly financial reports before Friday afternoon.',
-      ipa: '/pliːz meɪk ʃʊə tu səbˈmɪt jɔː ˈkwɔːtəli faɪˈnænʃl rɪˈpɔːts bɪˈfɔː ˈfraɪdeɪ ˌɑːftəˈnuːn/',
-      translation: 'Vui lòng đảm bảo nộp các báo cáo tài chính hàng quý trước chiều thứ Sáu.',
-      topic: 'Office & Deadlines',
-      focusSound: 'Ending sound /-ts/ và nối âm "make sure"',
-      level: 'TOEIC 750+'
-    },
-    {
-      sentence: 'The annual shareholder meeting has been rescheduled to conference room three on the fifth floor.',
-      ipa: '/ði ˈænjuəl ˈʃeəhəʊldə ˈmiːtɪŋ hæz biːn ˌriːˈʃedjuːld tu ˈkɒnfərəns ruːm θriː ɒn ðə fɪfθ flɔː/',
-      translation: 'Cuộc họp cổ đông thường niên đã được dời lịch sang phòng hội nghị số 3 ở tầng năm.',
-      topic: 'Corporate Meetings',
-      focusSound: 'Âm /θ/ trong "three", "fifth" và /ð/ trong "the"',
-      level: 'TOEIC 850+'
-    },
-    {
-      sentence: 'Our customer support team is committed to resolving all client inquiries within twenty-four hours.',
-      ipa: '/ˈaʊə ˈkʌstəmə səˈpɔːt tiːm ɪz kəˈmɪtɪd tu rɪˈzɒlvɪŋ ɔːl ˈklaɪənt ɪnˈkwaɪəriz wɪˈðɪn ˈtwenti fɔːr ˈaʊəz/',
-      translation: 'Đội ngũ hỗ trợ khách hàng cam kết giải quyết mọi thắc mắc của khách hàng trong vòng 24 giờ.',
-      topic: 'Customer Service',
-      focusSound: 'Âm đuôi /-ɪd/ trong "committed" và /-z/ trong "inquiries"',
-      level: 'TOEIC 800+'
-    },
-    {
-      sentence: 'Due to severe weather conditions, all departing flights from terminal two have been temporarily suspended.',
-      ipa: '/djuː tu sɪˈvɪə ˈweðə kənˈdɪʃnz, ɔːl dɪˈpɑːtɪŋ flaɪts frɒm ˈtɜːmɪnl tuː hæv biːn ˈtemprərəli səˈspendɪd/',
-      translation: 'Do thời tiết xấu, tất cả chuyến bay khởi hành từ nhà ga số 2 tạm thời bị hoãn.',
-      topic: 'Airport & Travel',
-      focusSound: 'Âm /ð/ trong "weather" và ngắt cụm chuẩn',
-      level: 'TOEIC 800+'
-    },
-    {
-      sentence: 'We are launching a comprehensive marketing campaign to promote our newest product line across Asia.',
-      ipa: '/wi ɑː ˈlɔːntʃɪŋ ə ˌkɒmprɪˈhensɪv ˈmɑːkɪtɪŋ kæmˈpeɪn tu prəˈməʊt ˈaʊə ˈnjuːɪst ˈprɒdʌkt laɪn əˈkrɒs ˈeɪʒə/',
-      translation: 'Chúng tôi đang triển khai chiến dịch tiếp thị toàn diện để quảng bá dòng sản phẩm mới tại châu Á.',
-      topic: 'Marketing & Sales',
-      focusSound: 'Trọng âm từ "campaign", "comprehensive"',
-      level: 'TOEIC 850+'
-    },
-    {
-      sentence: 'Please review the attached contract carefully before signing and returning it to human resources.',
-      ipa: '/pliːz rɪˈvjuː ði əˈtætʃt ˈkɒntrækt ˈkeəfəli bɪˈfɔː ˈsaɪnɪŋ ənd rɪˈtɜːnɪŋ ɪt tu ˈhjuːmən rɪˈzɔːsɪz/',
-      translation: 'Vui lòng xem kỹ hợp đồng đính kèm trước khi ký và gửi lại cho phòng nhân sự.',
-      topic: 'Contracts & HR',
-      focusSound: 'Âm kết thúc /-t/ trong "attached" (/əˈtætʃt/)',
-      level: 'TOEIC 750+'
-    }
-  ],
-  'Tiếng Anh Phổ Thông': [
-    {
-      sentence: 'Learning a foreign language opens up incredible opportunities for your future education and career.',
-      ipa: '/ˈlɜːnɪŋ ə ˈfɒrən ˈlæŋɡwɪdʒ ˈəʊpənz ʌp ɪnˈkredəbl ˌɒpəˈtjuːnətiz fɔː jɔː ˈfjuːtʃər ˌedʒuˈkeɪʃn ənd kəˈrɪə/',
-      translation: 'Học một ngoại ngữ mở ra những cơ hội tuyệt vời cho việc học tập và sự nghiệp tương lai.',
-      topic: 'Học tập & Tương lai',
-      focusSound: 'Nối âm "opens up" và âm /dʒ/ trong "language"',
-      level: 'THPT / B1-B2'
-    },
-    {
-      sentence: 'If I had more free time this weekend, I would definitely join the school volunteer activities.',
-      ipa: '/ɪf aɪ hæd mɔː friː taɪm ðɪs ˌwiːkˈend, aɪ wʊd ˈdefɪnətli dʒɔɪn ðə skuːl ˌvɒlənˈtɪər ækˈtɪvətiz/',
-      translation: 'Nếu có nhiều thời gian rảnh cuối tuần này, tôi chắc chắn sẽ tham gia các hoạt động tình nguyện của trường.',
-      topic: 'Trường học & Tình nguyện',
-      focusSound: 'Nhịp điệu câu điều kiện loại 2 & âm /v/ trong "volunteer"',
-      level: 'THCS - THPT'
-    },
-    {
-      sentence: 'Regular physical exercise and healthy eating habits are essential for maintaining your well-being.',
-      ipa: '/ˈreɡjələ ˈfɪzɪkl ˈeksəsaɪz ənd ˈhelθi ˈiːtɪŋ ˈhæbɪts ɑːr ɪˈsenʃl fɔː meɪnˈteɪnɪŋ jɔː welˈbiːɪŋ/',
-      translation: 'Tập thể dục đều đặn và thói quen ăn uống lành mạnh là rất cần thiết để duy trì sức khỏe.',
-      topic: 'Sức khỏe & Đời sống',
-      focusSound: 'Âm /θ/ trong "healthy" và /z/ trong "exercise"',
-      level: 'THPT / B1'
-    },
-    {
-      sentence: 'My teacher always encourages us to speak English confidently without worrying about making mistakes.',
-      ipa: '/maɪ ˈtiːtʃər ˈɔːlweɪz ɪnˈkʌrɪdʒɪz ʌs tu spiːk ˈɪŋɡlɪʃ ˈkɒnfɪdəntli wɪˈðaʊt ˈwʌriɪŋ əˈbaʊt ˈmeɪkɪŋ mɪˈsteɪks/',
-      translation: 'Thầy cô luôn động viên chúng tôi tự tin nói tiếng Anh mà không cần sợ mắc lỗi sai.',
-      topic: 'Giao tiếp hàng ngày',
-      focusSound: 'Ending sound /-ɪz/ trong "encourages"',
-      level: 'THCS - THPT'
-    },
-    {
-      sentence: 'We should protect our local environment by reducing single-use plastic and recycling paper.',
-      ipa: '/wi ʃʊd prəˈtekt ˈaʊə ˈləʊkl ɪnˈvaɪrənmənt baɪ rɪˈdjuːsɪŋ ˈsɪŋɡl juːs ˈplæstɪk ənd ˌriːˈsaɪklɪŋ ˈpeɪpə/',
-      translation: 'Chúng ta nên bảo vệ môi trường địa phương bằng cách giảm rác nhựa dùng một lần và tái chế giấy.',
-      topic: 'Môi trường sống',
-      focusSound: 'Âm /ʃ/ trong "should" và /kl/ trong "plastic", "recycling"',
-      level: 'THCS - THPT'
-    }
-  ]
+// Câu dự phòng duy nhất phòng trường hợp mất mạng hoặc chưa cấu hình API Key
+const EMERGENCY_FALLBACK_SENTENCES = {
+  'IELTS': {
+    sentence: 'Artificial intelligence is transforming modern education and scientific research around the world.',
+    ipa: '/ˌɑːtɪˈfɪʃl ɪnˈtelɪdʒəns ɪz trænsˈfɔːmɪŋ ˈmɒdn ˌedʒuˈkeɪʃn ənd ˌsaɪənˈtɪfɪk rɪˈsɜːtʃ əˈraʊnd ðə wɜːld/',
+    translation: 'Trí tuệ nhân tạo đang biến đổi nền giáo dục hiện đại và nghiên cứu khoa học trên toàn thế giới.',
+    topic: 'Technology & Science',
+    focusSound: 'Liên kết âm & trọng âm từ đa âm tiết',
+    level: 'IELTS Band 7.5+'
+  },
+  'TOEIC': {
+    sentence: 'Please make sure to submit your quarterly financial reports before Friday afternoon.',
+    ipa: '/pliːz meɪk ʃʊə tu səbˈmɪt jɔː ˈkwɔːtəli faɪˈnænʃl rɪˈpɔːts bɪˈfɔː ˈfraɪdeɪ ˌɑːftəˈnuːn/',
+    translation: 'Vui lòng đảm bảo nộp các báo cáo tài chính hàng quý trước chiều thứ Sáu.',
+    topic: 'Office & Finance',
+    focusSound: 'Ending sound /-ts/ và nối âm "make sure"',
+    level: 'TOEIC 750+'
+  },
+  'Tiếng Anh Phổ Thông': {
+    sentence: 'Learning a foreign language opens up incredible opportunities for your future education and career.',
+    ipa: '/ˈlɜːnɪŋ ə ˈfɒrən ˈlæŋɡwɪdʒ ˈəʊpənz ʌp ɪnˈkredəbl ˌɒpəˈtjuːnətiz fɔː jɔː ˈfjuːtʃər ˌedʒuˈkeɪʃn ənd kəˈrɪə/',
+    translation: 'Học một ngoại ngữ mở ra những cơ hội tuyệt vời cho việc học tập và sự nghiệp tương lai.',
+    topic: 'Học tập & Tương lai',
+    focusSound: 'Nối âm "opens up" và âm /dʒ/ trong "language"',
+    level: 'THPT / B1-B2'
+  }
 };
 
-// 9. AI CHẤM ĐIỂM PHÁT ÂM NÂNG CAO VỚI BỘ TẠO CÂU THÔNG MINH
+const TOPIC_OPTIONS = [
+  'Ngẫu nhiên',
+  'Công nghệ & AI',
+  'Môi trường & Biến đổi khí hậu',
+  'Kinh doanh & Đàm phán',
+  'Giáo dục & Kỹ năng số',
+  'Đời sống & Giao tiếp hàng ngày',
+  'Du lịch & Văn hóa quốc tế',
+  'Phỏng vấn xin việc & CV',
+  'Y tế & Sức khỏe tinh thần'
+];
+
+// 9. AI CHẤM ĐIỂM PHÁT ÂM - 100% CÂU DO GEMINI AI TỰ ĐỘNG SINH REAL-TIME
 export function SpeakingCoachView({ englishMode }) {
-  // Lấy danh sách câu ban đầu theo chế độ
-  const currentModeBank = PRACTICE_SENTENCE_BANKS[englishMode] || PRACTICE_SENTENCE_BANKS['IELTS'];
-  
-  const [sentencePool, setSentencePool] = useState(currentModeBank);
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [targetSentence, setTargetSentence] = useState(currentModeBank[0].sentence);
-  const [currentMeta, setCurrentMeta] = useState(currentModeBank[0]);
+  const fallback = EMERGENCY_FALLBACK_SENTENCES[englishMode] || EMERGENCY_FALLBACK_SENTENCES['IELTS'];
+
+  // Lịch sử các câu AI đã sinh trong phiên học
+  const [aiHistory, setAiHistory] = useState([fallback]);
+  const [historyIndex, setHistoryIndex] = useState(0);
+
+  const [currentSentenceObj, setCurrentSentenceObj] = useState(fallback);
+  const [targetSentence, setTargetSentence] = useState(fallback.sentence);
   
   const [spokenText, setSpokenText] = useState('');
   const [isListening, setIsListening] = useState(false);
   const [feedback, setFeedback] = useState('');
   const [loading, setLoading] = useState(false);
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
-  const [selectedTopic, setSelectedTopic] = useState('Tất cả');
+  const [selectedTopic, setSelectedTopic] = useState('Ngẫu nhiên');
   const [audioSpeed, setAudioSpeed] = useState(0.95);
   const [showTranslation, setShowTranslation] = useState(true);
+  const [aiTotalCount, setAiTotalCount] = useState(1);
 
-  // Khi người dùng chuyển englishMode ở thanh tiêu đề, cập nhật lại ngân hàng câu
-  React.useEffect(() => {
-    const bank = PRACTICE_SENTENCE_BANKS[englishMode] || PRACTICE_SENTENCE_BANKS['IELTS'];
-    setSentencePool(bank);
-    setCurrentIndex(0);
-    setTargetSentence(bank[0].sentence);
-    setCurrentMeta(bank[0]);
-    setSpokenText('');
-    setFeedback('');
-  }, [englishMode]);
-
-  // Đổi sang câu khác trong ngân hàng
-  const handleNextSentence = () => {
-    const nextIdx = (currentIndex + 1) % sentencePool.length;
-    setCurrentIndex(nextIdx);
-    const nextItem = sentencePool[nextIdx];
-    setTargetSentence(nextItem.sentence);
-    setCurrentMeta(nextItem);
-    setSpokenText('');
-    setFeedback('');
-  };
-
-  // Chọn câu ngẫu nhiên
-  const handleRandomSentence = () => {
-    if (sentencePool.length <= 1) return;
-    let randIdx = currentIndex;
-    while (randIdx === currentIndex) {
-      randIdx = Math.floor(Math.random() * sentencePool.length);
-    }
-    setCurrentIndex(randIdx);
-    const nextItem = sentencePool[randIdx];
-    setTargetSentence(nextItem.sentence);
-    setCurrentMeta(nextItem);
-    setSpokenText('');
-    setFeedback('');
-  };
-
-  // AI Tự tạo câu mẫu mới theo ngữ cảnh
-  const handleGenerateAISentence = async () => {
+  // HÀM GỌI GEMINI AI TỰ TẠO CÂU MỚI THEO THỜI GIAN THỰC (REAL-TIME GENERATION)
+  const generateNewAISentence = async (topicOverride = null) => {
     setIsGeneratingAI(true);
     try {
-      const topicPrompt = selectedTopic !== 'Tất cả' ? `thuộc chủ đề "${selectedTopic}"` : 'thuộc chủ đề phong phú, mang tính thực tế cao';
-      const prompt = `Bạn là chuyên gia ngôn ngữ tiếng Anh. Hãy tạo 1 câu tiếng Anh chất lượng cao để người học luyện phát âm và ngữ điệu theo chuẩn hệ đào tạo "${englishMode}" (${topicPrompt}).
-Yêu cầu câu có độ dài từ 10 đến 18 từ, có tính ứng dụng cao, từ vựng tự nhiên.
-Hãy trả về JSON theo đúng định dạng sau:
+      const activeTopic = topicOverride || selectedTopic;
+      const topicClause = activeTopic !== 'Ngẫu nhiên' 
+        ? `Tập trung sâu vào chủ đề: "${activeTopic}".` 
+        : `Lựa chọn ngẫu nhiên một trong các chủ đề thực tế: Công nghệ, Khoa học, Kinh tế, Giáo dục, Môi trường, Du lịch, Đời sống hàng ngày.`;
+
+      const randomSeed = Math.floor(Math.random() * 1000000);
+      const prompt = `Bạn là Giám khảo Khảo thí và Huấn luyện viên Phát âm Tiếng Anh Quốc tế hàng đầu.
+Nhiệm vụ: Hãy tự sáng tác 1 câu tiếng Anh hoàn toàn MỚI LẠ, ĐỘC BẢN, TỰ NHIÊN (Seed: ${randomSeed}, timestamp: ${Date.now()}) theo chuẩn hệ đào tạo: "${englishMode}".
+${topicClause}
+
+Tiêu chuẩn chất lượng:
+1. Độ dài: từ 11 đến 18 từ. Cấu trúc câu tự nhiên, giàu ngữ điệu, chuẩn ngữ pháp bản xứ, không sáo rỗng.
+2. Phiên âm IPA: phiên âm quốc tế chuẩn xác từng từ trong câu (VD: /ˌɑːtɪˈfɪʃl ɪnˈtelɪdʒəns.../).
+3. Dịch nghĩa tiếng Việt: tự nhiên, văn minh, thoát ý.
+4. Tiêu điểm phát âm (focusSound): chỉ rõ 1-2 âm khó, trọng âm hoặc âm đuôi (ending sounds: /-s/, /-z/, /-t/, /-d/, /θ/, /ð/, /ʃ/, /tʃ/) người Việt dễ mắc lỗi.
+5. Cấp độ đánh giá (level): Ghi rõ cấp độ (VD: "IELTS 7.5+", "TOEIC 850+", "THPT Nâng Cao - B2").
+
+Trả về ĐÚNG định dạng JSON sau:
 {
   "sentence": "câu tiếng Anh hoàn chỉnh",
-  "ipa": "/phiên âm IPA chuẩn quốc tế cho cả câu/",
-  "translation": "Bản dịch nghĩa tiếng Việt tự nhiên, súc tích",
+  "ipa": "/phiên âm IPA cho cả câu/",
+  "translation": "Bản dịch nghĩa tiếng Việt tự nhiên",
   "topic": "Tên chủ đề ngắn gọn",
-  "focusSound": "Chỉ ra 1-2 trọng âm hoặc âm tiết người Việt hay phát âm sai cần chú ý (VD: ending /s/, âm /θ/, nuốt âm)",
-  "level": "Cấp độ đánh giá (VD: IELTS 7.5+, TOEIC 850+, B2-C1)"
+  "focusSound": "Điểm phát âm/khẩu hình cần lưu ý",
+  "level": "Cấp độ đánh giá"
 }`;
 
       const schema = {
@@ -247,23 +113,57 @@ Hãy trả về JSON theo đúng định dạng sau:
           focusSound: { type: Type.STRING },
           level: { type: Type.STRING }
         },
-        required: ['sentence', 'ipa', 'translation', 'topic', 'focusSound']
+        required: ['sentence', 'ipa', 'translation', 'topic', 'focusSound', 'level']
       };
 
       const newSentenceObj = await generateJSON(prompt, schema);
-      
-      // Thêm câu mới vào danh sách và đặt làm câu hiện tại
-      setSentencePool((prev) => [newSentenceObj, ...prev]);
-      setCurrentIndex(0);
+
+      // Cập nhật câu hiện tại và thêm vào lịch sử
+      setCurrentSentenceObj(newSentenceObj);
       setTargetSentence(newSentenceObj.sentence);
-      setCurrentMeta(newSentenceObj);
+      setAiHistory((prev) => [newSentenceObj, ...prev]);
+      setHistoryIndex(0);
+      setAiTotalCount((c) => c + 1);
+      
+      // Xóa kết quả đọc cũ để học viên sẵn sàng luyện câu mới
       setSpokenText('');
       setFeedback('');
     } catch (error) {
-      console.error('Lỗi khi tạo câu phát âm AI:', error);
+      console.error('Lỗi khi AI tạo câu:', error);
       alert('Không thể tạo câu mới: ' + formatAIError(error));
     } finally {
       setIsGeneratingAI(false);
+    }
+  };
+
+  // Tự động gọi AI tạo câu mới toanh ngay khi mở hoặc chuyển chế độ englishMode
+  React.useEffect(() => {
+    generateNewAISentence();
+  }, [englishMode]);
+
+  // Xem câu trước trong lịch sử đã AI sinh
+  const handlePrevHistory = () => {
+    if (historyIndex < aiHistory.length - 1) {
+      const nextIdx = historyIndex + 1;
+      setHistoryIndex(nextIdx);
+      const item = aiHistory[nextIdx];
+      setCurrentSentenceObj(item);
+      setTargetSentence(item.sentence);
+      setSpokenText('');
+      setFeedback('');
+    }
+  };
+
+  // Xem câu sau trong lịch sử
+  const handleNextHistory = () => {
+    if (historyIndex > 0) {
+      const nextIdx = historyIndex - 1;
+      setHistoryIndex(nextIdx);
+      const item = aiHistory[nextIdx];
+      setCurrentSentenceObj(item);
+      setTargetSentence(item.sentence);
+      setSpokenText('');
+      setFeedback('');
     }
   };
 
@@ -285,15 +185,15 @@ Hãy trả về JSON theo đúng định dạng sau:
     setLoading(true);
     try {
       const prompt = `Chế độ luyện thi: ${englishMode}.
-Chủ đề: ${currentMeta?.topic || 'General'}.
-Câu mẫu chuẩn: "${targetSentence}"
-Phiên âm IPA chuẩn: "${currentMeta?.ipa || ''}"
+Chủ đề: ${currentSentenceObj?.topic || 'Tổng hợp'}.
+Câu mẫu chuẩn do AI sinh: "${targetSentence}"
+Phiên âm IPA chuẩn: "${currentSentenceObj?.ipa || ''}"
 Người học đọc được nhận diện qua microphone là: "${spokenText}".
-Điểm ngữ âm cần chú ý của câu: ${currentMeta?.focusSound || 'Trọng âm và ending sounds'}.
+Điểm ngữ âm cần chú ý của câu: ${currentSentenceObj?.focusSound || 'Trọng âm và ending sounds'}.
 
 Hãy đánh giá phát âm chi tiết, cấu trúc chấm điểm:
-1. Độ chính xác tổng thể (thang điểm 100%) và nhận xét động viên.
-2. So sánh từ người học đọc đúng vs từ phát âm chưa rõ / nuốt âm / sai ending sound.
+1. Độ chính xác tổng thể (thang điểm 100%) và lời nhận xét chân thành, khích lệ.
+2. So sánh từ người học đọc chuẩn vs từ phát âm chưa rõ / nuốt âm / sai ending sound.
 3. Hướng dẫn cụ thể khẩu hình miệng và vị trí đặt lưỡi cho 1-2 từ khó nhất bằng tiếng Việt.
 4. Mẹo nối âm và ngữ điệu (Intonation) câu.`;
 
@@ -333,100 +233,138 @@ Hãy đánh giá phát âm chi tiết, cấu trúc chấm điểm:
             <span className="text-xs px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30">
               {englishMode}
             </span>
-            {currentMeta?.level && (
+            {currentSentenceObj?.level && (
               <span className="text-xs px-2.5 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 font-semibold border border-cyan-500/30">
-                {currentMeta.level}
+                {currentSentenceObj.level}
               </span>
             )}
-            <span className="text-xs text-slate-400 font-medium">
-              Câu {currentIndex + 1}/{sentencePool.length}
+            <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-violet-500/20 text-violet-300 font-semibold border border-violet-500/30 flex items-center gap-1">
+              <Sparkles className="w-3 h-3 text-yellow-300" />
+              100% AI sinh trực tiếp
             </span>
           </div>
 
-          {/* CÁC NÚT ĐỔI CÂU & TẠO CÂU AI */}
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleNextSentence}
-              title="Đổi sang câu tiếp theo trong ngân hàng"
-              className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold flex items-center gap-1.5 transition-all active:scale-95 border border-slate-700"
-            >
-              <RotateCw className="w-3.5 h-3.5 text-cyan-400" />
-              <span>Đổi câu khác</span>
-            </button>
+          {/* NÚT TẢI CÂU MỚI (AI TỰ TẠO REAL-TIME) */}
+          <div className="flex items-center gap-1.5">
+            {aiHistory.length > 1 && (
+              <div className="flex items-center bg-slate-800/80 rounded-xl p-0.5 border border-slate-700 mr-1">
+                <button
+                  onClick={handlePrevHistory}
+                  disabled={historyIndex >= aiHistory.length - 1}
+                  title="Xem lại câu AI vừa sinh trước đó"
+                  className="p-1 rounded-lg text-slate-300 hover:text-white disabled:opacity-30 disabled:hover:text-slate-300 transition-colors"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <span className="text-[10px] font-mono px-1.5 text-slate-400">
+                  {aiHistory.length - historyIndex}/{aiHistory.length}
+                </span>
+                <button
+                  onClick={handleNextHistory}
+                  disabled={historyIndex <= 0}
+                  title="Chuyển đến câu mới hơn"
+                  className="p-1 rounded-lg text-slate-300 hover:text-white disabled:opacity-30 disabled:hover:text-slate-300 transition-colors"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            )}
 
             <button
-              onClick={handleRandomSentence}
-              title="Chọn ngẫu nhiên một câu"
-              className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs transition-all active:scale-95 border border-slate-700"
-            >
-              <Shuffle className="w-3.5 h-3.5 text-indigo-400" />
-            </button>
-
-            <button
-              onClick={handleGenerateAISentence}
+              onClick={() => generateNewAISentence()}
               disabled={isGeneratingAI}
-              title="AI tự động tạo một câu luyện đọc mới theo chủ đề"
-              className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 hover:from-indigo-500 hover:to-pink-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-md shadow-indigo-500/20 active:scale-95 transition-all disabled:opacity-60"
+              title="Yêu cầu AI sáng tạo một câu luyện phát âm mới hoàn toàn"
+              className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 hover:from-indigo-500 hover:to-pink-500 text-white text-xs font-bold flex items-center gap-2 shadow-lg shadow-indigo-600/25 active:scale-95 transition-all disabled:opacity-60"
             >
               {isGeneratingAI ? (
                 <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  <span>AI Đang Soạn Câu...</span>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>AI Đang Tạo Câu Mới...</span>
                 </>
               ) : (
                 <>
-                  <Sparkles className="w-3.5 h-3.5 text-yellow-300" />
-                  <span>AI Tạo Câu Mới</span>
+                  <RotateCw className="w-3.5 h-3.5 text-yellow-300" />
+                  <span>Đổi câu khác (AI)</span>
                 </>
               )}
             </button>
           </div>
         </div>
 
-        {/* THÔNG TIN CHỦ ĐỀ & TIÊU ĐIỂM NGỮ ÂM */}
-        <div className="flex flex-wrap items-center justify-between text-xs text-slate-400 gap-2">
-          <div className="flex items-center gap-1.5">
-            <Target className="w-3.5 h-3.5 text-cyan-400" />
-            <span>Chủ đề: <strong className="text-cyan-300">{currentMeta?.topic || 'Tổng hợp'}</strong></span>
+        {/* BỘ CHỌN CHỦ ĐỀ CHO AI */}
+        <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-950/40 p-2.5 rounded-2xl border border-slate-800/80 text-xs">
+          <div className="flex items-center gap-1.5 text-slate-400">
+            <SlidersHorizontal className="w-3.5 h-3.5 text-indigo-400" />
+            <span>Chủ đề AI:</span>
+            <select
+              value={selectedTopic}
+              onChange={(e) => {
+                const newTopic = e.target.value;
+                setSelectedTopic(newTopic);
+                generateNewAISentence(newTopic);
+              }}
+              disabled={isGeneratingAI}
+              className="bg-slate-900 border border-slate-700 text-cyan-300 font-semibold rounded-lg px-2.5 py-1 text-xs focus:outline-none focus:border-indigo-500 cursor-pointer"
+            >
+              {TOPIC_OPTIONS.map((t) => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
           </div>
-          {currentMeta?.focusSound && (
-            <div className="text-amber-300/90 bg-amber-500/10 px-2.5 py-0.5 rounded-md border border-amber-500/20 font-medium">
-              ⚡ Chú ý: {currentMeta.focusSound}
+
+          {currentSentenceObj?.focusSound && (
+            <div className="text-amber-300/95 bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/20 font-medium text-[11px]">
+              ⚡ Chú ý: {currentSentenceObj.focusSound}
             </div>
           )}
         </div>
 
-        {/* KHUNG CÂU MẪU (CHO PHÉP CHỈNH SỬA TÙY Ý HOẶC TỰ NHẬP) */}
+        {/* KHUNG CÂU MẪU SINH BỞI AI (CHO PHÉP TỰ SỬA NẾU MUỐN) */}
         <div className="space-y-2">
           <div className="flex justify-between items-center text-xs">
-            <span className="font-semibold text-slate-300">Câu mẫu luyện đọc:</span>
-            <span className="text-[11px] text-slate-400 italic">(Có thể tự gõ hoặc chỉnh sửa trực tiếp)</span>
+            <span className="font-semibold text-slate-300 flex items-center gap-1.5">
+              <span>Câu mẫu AI sinh cho bạn:</span>
+              {currentSentenceObj?.topic && (
+                <span className="text-[11px] px-2 py-0.2 rounded-md bg-cyan-500/10 text-cyan-300 border border-cyan-500/20 font-normal">
+                  Chủ đề: {currentSentenceObj.topic}
+                </span>
+              )}
+            </span>
+            <span className="text-[11px] text-slate-400 italic">(Có thể chỉnh sửa trực tiếp)</span>
           </div>
-          <textarea
-            rows={3}
-            value={targetSentence}
-            onChange={(e) => {
-              setTargetSentence(e.target.value);
-              setSpokenText('');
-              setFeedback('');
-            }}
-            className="w-full bg-slate-950/80 border border-slate-700/80 rounded-2xl p-4 text-base font-semibold text-cyan-200 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500/50 transition-all leading-relaxed"
-          />
+
+          {isGeneratingAI ? (
+            <div className="w-full h-24 bg-slate-950/80 border border-indigo-500/30 rounded-2xl p-4 flex flex-col items-center justify-center space-y-2 animate-pulse">
+              <Loader2 className="w-5 h-5 text-indigo-400 animate-spin" />
+              <p className="text-xs text-indigo-300 font-medium">Gemini AI đang sáng tạo câu luyện đọc mới...</p>
+            </div>
+          ) : (
+            <textarea
+              rows={3}
+              value={targetSentence}
+              onChange={(e) => {
+                setTargetSentence(e.target.value);
+                setSpokenText('');
+                setFeedback('');
+              }}
+              className="w-full bg-slate-950/80 border border-slate-700/80 rounded-2xl p-4 text-base font-semibold text-cyan-200 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500/50 transition-all leading-relaxed"
+            />
+          )}
         </div>
 
         {/* PHIÊN ÂM IPA VÀ BẢN DỊCH NGHĨA */}
-        {currentMeta?.ipa && (
+        {currentSentenceObj?.ipa && !isGeneratingAI && (
           <div className="p-3.5 rounded-2xl bg-slate-950/60 border border-slate-800 space-y-2 text-xs">
             <div className="flex items-start gap-2">
               <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-400 font-mono text-[10px] shrink-0 uppercase tracking-wider">
                 IPA
               </span>
               <p className="font-mono text-cyan-400/90 leading-relaxed tracking-wide select-all">
-                {currentMeta.ipa}
+                {currentSentenceObj.ipa}
               </p>
             </div>
             
-            {currentMeta.translation && (
+            {currentSentenceObj.translation && (
               <div className="flex items-start gap-2 pt-2 border-t border-slate-800/80">
                 <button 
                   onClick={() => setShowTranslation(!showTranslation)}
@@ -436,7 +374,7 @@ Hãy đánh giá phát âm chi tiết, cấu trúc chấm điểm:
                 </button>
                 {showTranslation && (
                   <p className="text-slate-300 italic">
-                    "{currentMeta.translation}"
+                    "{currentSentenceObj.translation}"
                   </p>
                 )}
               </div>
@@ -450,10 +388,11 @@ Hãy đánh giá phát âm chi tiết, cấu trúc chấm điểm:
           <div className="flex items-center gap-2">
             <button
               onClick={() => speakText(targetSentence, 'en-US', audioSpeed)}
-              className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 active:scale-95 text-cyan-300 rounded-xl text-xs font-bold flex items-center gap-2 transition-all border border-slate-700 shadow"
+              disabled={isGeneratingAI}
+              className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 active:scale-95 text-cyan-300 rounded-xl text-xs font-bold flex items-center gap-2 transition-all border border-slate-700 shadow disabled:opacity-50"
             >
               <Volume2 className="w-4 h-4 text-cyan-400" />
-              <span>Nghe Câu Mẫu</span>
+              <span>Nghe Mẫu</span>
             </button>
 
             {/* Nút chỉnh tốc độ đọc mẫu */}
@@ -473,7 +412,8 @@ Hãy đánh giá phát âm chi tiết, cấu trúc chấm điểm:
           {/* Nút ghi âm micro */}
           <button
             onClick={startRecord}
-            className={`px-6 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 shadow-lg transition-all active:scale-95 ${
+            disabled={isGeneratingAI}
+            className={`px-6 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 shadow-lg transition-all active:scale-95 disabled:opacity-50 ${
               isListening
                 ? 'bg-red-600 hover:bg-red-500 text-white animate-pulse shadow-red-500/30'
                 : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-500/20'
@@ -552,7 +492,7 @@ Hãy đánh giá phát âm chi tiết, cấu trúc chấm điểm:
             <div className="max-w-xs space-y-1">
               <p className="font-bold text-slate-200">Sẵn sàng luyện phát âm!</p>
               <p className="text-xs text-slate-400">
-                Bấm <strong>"Đổi câu khác"</strong> hoặc <strong>"AI Tạo Câu Mới"</strong>, sau đó nhấn <strong>"Bấm Để Đọc"</strong> để AI lắng nghe và chỉ ra khẩu hình chuẩn nhé.
+                Mỗi lần bấm <strong>"Đổi câu khác (AI)"</strong>, Gemini AI sẽ tự động sáng tạo câu luyện đọc hoàn toàn mới. Bấm <strong>"🎤 Bấm Để Đọc"</strong> để nhận xét khẩu hình nhé!
               </p>
             </div>
           </div>
@@ -561,7 +501,6 @@ Hãy đánh giá phát âm chi tiết, cấu trúc chấm điểm:
     </div>
   );
 }
-
 
 // 10. TỪ VỰNG 3D THEO CHỦ ĐỀ
 export function Vocab3DView({ englishMode }) {
