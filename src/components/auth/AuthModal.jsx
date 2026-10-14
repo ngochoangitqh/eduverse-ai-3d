@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X, Mail, Lock, User, Eye, EyeOff, LogIn, UserPlus,
   Flame, CheckCircle, AlertTriangle, ArrowRight, ShieldCheck
@@ -13,8 +13,14 @@ import {
 } from '../../services/firebaseService';
 import { isFirebaseConfigured } from '../../config/firebase';
 
-export default function AuthModal({ isOpen, onClose, currentUser, onOpenConfig }) {
-  const [mode, setMode] = useState('login'); // 'login' | 'register' | 'forgot'
+export default function AuthModal({ isOpen, onClose, currentUser, onOpenConfig, initialMode = 'register' }) {
+  const [mode, setMode] = useState(initialMode || 'register'); // 'login' | 'register' | 'forgot'
+
+  useEffect(() => {
+    if (isOpen && initialMode) {
+      setMode(initialMode);
+    }
+  }, [isOpen, initialMode]);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
