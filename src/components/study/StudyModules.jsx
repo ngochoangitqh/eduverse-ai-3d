@@ -1,8 +1,8 @@
 import React, { useState, useRef } from 'react';
 import { Type } from '@google/genai';
 import { renderMarkdownWithMath } from '../../utils/mathRenderer';
-import { Image as ImageIcon, X, Paperclip, Upload } from 'lucide-react';
-import { generateText, generateStream, generateJSON, formatAIError } from '../../services/geminiService';
+import { Image as ImageIcon, X, Paperclip, Upload, RotateCcw } from 'lucide-react';
+import { generateText, generateStream, generateChatStream, generateJSON, formatAIError } from '../../services/geminiService';
 import { createSpeechRecognizer } from '../../services/speechService';
 
 function fileToBase64(file) {
@@ -61,14 +61,15 @@ export function ChatbotView() {
     setInput('');
     setAttachedImage(null);
 
-    setMessages((prev) => [
-      ...prev,
-      {
-        role: 'user',
-        text: userMsg || '(Đã gửi ảnh chụp màn hình)',
-        image: currentImg?.url
-      }
-    ]);
+    const newMsgObj = {
+      role: 'user',
+      text: userMsg || '(Đã gửi ảnh chụp màn hình)',
+      image: currentImg?.url,
+      base64: currentImg?.base64,
+      mimeType: currentImg?.mimeType,
+    };
+
+    setMessages((prev) => [...prev, newMsgObj]);
     setLoading(true);
 
     const imagePart = currentImg
@@ -84,9 +85,12 @@ export function ChatbotView() {
 
     let streamed = false;
     try {
-      await generateStream(
-        promptText,
-        (currentText) => {
+      await generateChatStream({
+        messages, // Gửi kèm toàn bộ lịch sử các câu chat trước để nhớ ngữ cảnh
+        newPrompt: promptText,
+        imagePart,
+        systemInstruction: 'Bạn là Siêu Gia Sư AI thông minh. Đi thẳng vào giải quyết vấn đề, giải thích từng bước rõ ràng, chính xác. Luôn nhớ và liên kết chặt chẽ với ngữ cảnh các câu hỏi, lời giải và hình ảnh trong cuộc hội thoại trước đó. Không chào hỏi lặp đi lặp lại.',
+        onChunk: (currentText) => {
           if (!streamed) {
             streamed = true;
             setLoading(false);
@@ -99,9 +103,7 @@ export function ChatbotView() {
             });
           }
         },
-        'Bạn là Siêu Gia Sư AI thông minh. Đi thẳng vào giải quyết vấn đề, giải thích từng bước rõ ràng, chính xác. Không chào hỏi lặp đi lặp lại.',
-        imagePart
-      );
+      });
     } catch (err) {
       setMessages((prev) => [...prev, { role: 'ai', text: '⚠️ ' + formatAIError(err) }]);
     } finally {
@@ -109,16 +111,44 @@ export function ChatbotView() {
     }
   };
 
+  const handleResetChat = () => {
+    if (confirm('Bắt đầu cuộc trò chuyện mới và làm mới bộ nhớ ngữ cảnh?')) {
+      setMessages([
+        { role: 'ai', text: 'Xin chào! Mình đã làm mới bộ nhớ ngữ cảnh. Bạn cần giải đáp bài tập hay lý thuyết môn nào?' }
+      ]);
+      setAttachedImage(null);
+    }
+  };
+
+  const userTurnCount = messages.filter((m) => m.role === 'user').length;
+
   return (
     <div
       onPaste={handlePaste}
       className="glass-panel rounded-2xl p-6 flex flex-col h-[calc(100vh-7rem)]"
     >
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-xl font-bold">🤖 AI Chatbot Gia Sư 24/7</h2>
-        <span className="text-xs text-slate-400 flex items-center gap-1.5 bg-slate-900/60 px-3 py-1.5 rounded-lg border border-slate-700">
-          📋 Hỗ trợ dán ảnh (Ctrl+V)
-        </span>
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4 pb-3 border-b border-slate-800">
+        <div className="flex items-center gap-3">
+          <h2 className="text-xl font-bold">🤖 AI Chatbot Gia Sư 24/7</h2>
+          <span className="text-[11px] text-cyan-300 bg-cyan-500/10 border border-cyan-500/30 px-2.5 py-1 rounded-full font-medium flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+            🧠 Nhớ ngữ cảnh: {userTurnCount} lượt trao đổi
+          </span>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleResetChat}
+            className="text-xs text-slate-300 hover:text-white bg-slate-900/90 hover:bg-slate-800 px-3 py-1.5 rounded-xl border border-slate-700 flex items-center gap-1.5 transition-all shadow-sm"
+            title="Làm mới cuộc trò chuyện để bắt đầu chủ đề mới"
+          >
+            <RotateCcw className="w-3.5 h-3.5 text-cyan-400" />
+            <span>Đoạn chat mới</span>
+          </button>
+          <span className="text-xs text-slate-400 flex items-center gap-1.5 bg-slate-900/60 px-3 py-1.5 rounded-xl border border-slate-700">
+            📋 Hỗ trợ dán ảnh (Ctrl+V)
+          </span>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto space-y-4 pr-2">
