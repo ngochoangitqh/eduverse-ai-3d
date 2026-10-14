@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Sparkles, MessageSquare, Mic, Layers, Camera,
-  Presentation, Zap, Ear, Network, Languages, Key
+  Presentation, Zap, Ear, Network, Languages, Key,
+  Flame, CheckCircle, AlertCircle, LogIn, LogOut, User
 } from 'lucide-react';
 import NeuralBackground3D from './components/three/NeuralBackground3D';
 import KnowledgeCore3D from './components/three/KnowledgeCore3D';
@@ -12,17 +13,64 @@ import {
   ChatbotView, SolverView, SlideGenView, SummarizerView,
   MeetingTrackerView, QuizMakerView, MindmapView, RoadmapView
 } from './components/study/StudyModules';
+import {
+  getFirebaseConfig, saveFirebaseConfig, isFirebaseConfigured, parseFirebaseSnippet
+} from './config/firebase';
+import {
+  subscribeToAuthChanges, loginWithGoogle, logoutUser
+} from './services/firebaseService';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [englishMode, setEnglishMode] = useState('IELTS');
   const [showKeyModal, setShowKeyModal] = useState(false);
+  const [modalTab, setModalTab] = useState('gemini'); // 'gemini' | 'firebase'
   const [apiKey, setApiKey] = useState(localStorage.getItem('GEMINI_API_KEY') || '');
+  const [firebaseSnippet, setFirebaseSnippet] = useState('');
+  const [firebaseConfigState, setFirebaseConfigState] = useState(getFirebaseConfig());
+  const [currentUser, setCurrentUser] = useState(null);
+
+  useEffect(() => {
+    const unsub = subscribeToAuthChanges((u) => {
+      setCurrentUser(u);
+    });
+    return () => unsub();
+  }, []);
 
   const saveApiKey = () => {
     localStorage.setItem('GEMINI_API_KEY', apiKey.trim());
     setShowKeyModal(false);
     alert('Đã lưu Gemini API Key thành công!');
+  };
+
+  const handleSaveFirebaseConfig = () => {
+    const parsed = parseFirebaseSnippet(firebaseSnippet);
+    if (!parsed) {
+      alert('Không nhận diện được cấu hình Firebase. Vui lòng dán đoạn mã firebaseConfig = {...} hoặc định dạng JSON từ Firebase Console!');
+      return;
+    }
+    saveFirebaseConfig(parsed);
+    setFirebaseConfigState(parsed);
+    setFirebaseSnippet('');
+    alert('Đã lưu cấu hình Firebase thành công! Dự án: ' + parsed.projectId);
+  };
+
+  const handleGoogleLogin = async () => {
+    try {
+      await loginWithGoogle();
+      alert('Đăng nhập Google thành công! Đã kết nối tài khoản đám mây.');
+    } catch (err) {
+      alert('Lỗi đăng nhập: ' + (err.message || err));
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await logoutUser();
+      alert('Đã đăng xuất tài khoản.');
+    } catch (err) {
+      alert('Lỗi: ' + (err.message || err));
+    }
   };
 
   return (
@@ -33,6 +81,7 @@ export default function App() {
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         onOpenApiKey={() => setShowKeyModal(true)}
+        currentUser={currentUser}
       />
 
       <main className="flex-1 h-full overflow-y-auto z-10 p-6 lg:p-8">
@@ -160,30 +209,146 @@ export default function App() {
         )}
       </main>
 
-      {/* Modal cài đặt API Key */}
+      {/* Modal cài đặt API Key & Firebase */}
       {showKeyModal && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="glass-panel rounded-2xl p-6 w-full max-w-md border border-indigo-500/40 space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="font-display font-bold text-lg flex items-center gap-2">
-                <Key className="w-5 h-5 text-cyan-400" /> Cấu hình Gemini API Key
-              </h3>
-              <button onClick={() => setShowKeyModal(false)} className="text-slate-400 hover:text-white text-sm">✕</button>
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-fadeIn">
+          <div className="glass-panel rounded-3xl p-6 w-full max-w-lg border border-indigo-500/40 space-y-5 shadow-2xl">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setModalTab('gemini')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                    modalTab === 'gemini'
+                      ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <Key className="w-3.5 h-3.5" /> Gemini API
+                </button>
+                <button
+                  onClick={() => setModalTab('firebase')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                    modalTab === 'firebase'
+                      ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <Flame className="w-3.5 h-3.5 text-amber-400" /> Firebase Cloud
+                </button>
+              </div>
+              <button
+                onClick={() => setShowKeyModal(false)}
+                className="w-7 h-7 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center text-xs"
+              >
+                ✕
+              </button>
             </div>
-            <p className="text-xs text-slate-300">
-              Dán Gemini API Key của bạn vào đây để kích hoạt toàn bộ tính năng AI (hoặc đặt biến <code>VITE_GEMINI_API_KEY</code> trong file <code>.env</code>):
-            </p>
-            <input
-              type="password"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              placeholder="AIzaSy..."
-              className="w-full px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-sm"
-            />
-            <div className="flex justify-end gap-2">
-              <button onClick={() => setShowKeyModal(false)} className="px-4 py-2 rounded-xl bg-slate-800 text-xs">Đóng</button>
-              <button onClick={saveApiKey} className="glow-btn px-5 py-2 rounded-xl text-xs font-bold text-white">Lưu API Key</button>
-            </div>
+
+            {modalTab === 'gemini' ? (
+              <div className="space-y-4">
+                <div>
+                  <h4 className="text-sm font-bold text-white mb-1">Cấu hình Gemini API Key</h4>
+                  <p className="text-xs text-slate-300">
+                    Dán Gemini API Key của bạn vào đây để kích hoạt toàn bộ tính năng AI (hoặc đặt biến <code>VITE_GEMINI_API_KEY</code> trong file <code>.env</code>):
+                  </p>
+                </div>
+                <input
+                  type="password"
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  placeholder="AIzaSy..."
+                  className="w-full px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-sm focus:outline-none focus:border-cyan-500 font-mono text-cyan-300"
+                />
+                <div className="flex justify-end gap-2 pt-2">
+                  <button onClick={() => setShowKeyModal(false)} className="px-4 py-2 rounded-xl bg-slate-800 text-xs">
+                    Đóng
+                  </button>
+                  <button onClick={saveApiKey} className="glow-btn px-5 py-2 rounded-xl text-xs font-bold text-white">
+                    Lưu API Key
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <h4 className="text-sm font-bold text-white flex items-center gap-1.5">
+                      <Flame className="w-4 h-4 text-amber-400" /> Đồng bộ & Lưu Trữ Firebase
+                    </h4>
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                      isFirebaseConfigured()
+                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                        : 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                    }`}>
+                      {isFirebaseConfigured() ? `✅ Đã kết nối: ${firebaseConfigState.projectId}` : '⚠️ Chưa cấu hình'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-300">
+                    Lưu bài tập, flashcard, lịch sử chat và tiến độ học lên đám mây Firestore & Storage.
+                  </p>
+                </div>
+
+                {/* Trạng thái tài khoản */}
+                {currentUser ? (
+                  <div className="p-3 bg-slate-900/90 border border-emerald-500/30 rounded-xl flex items-center justify-between">
+                    <div className="flex items-center gap-2.5 overflow-hidden">
+                      {currentUser.photoURL ? (
+                        <img src={currentUser.photoURL} alt="Avatar" className="w-9 h-9 rounded-full border border-emerald-400 shrink-0" />
+                      ) : (
+                        <div className="w-9 h-9 rounded-full bg-emerald-600 flex items-center justify-center text-sm font-bold text-white shrink-0">
+                          {(currentUser.displayName || currentUser.email || 'U')[0].toUpperCase()}
+                        </div>
+                      )}
+                      <div className="overflow-hidden">
+                        <p className="text-xs font-bold text-white truncate">{currentUser.displayName || 'Học viên EduVerse'}</p>
+                        <p className="text-[10px] text-slate-400 truncate">{currentUser.email}</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={handleLogout}
+                      className="px-3 py-1.5 rounded-lg bg-red-600/20 hover:bg-red-600/30 text-red-300 border border-red-500/30 text-xs font-semibold shrink-0 flex items-center gap-1 cursor-pointer"
+                    >
+                      <LogOut className="w-3.5 h-3.5" /> Đăng xuất
+                    </button>
+                  </div>
+                ) : isFirebaseConfigured() ? (
+                  <button
+                    onClick={handleGoogleLogin}
+                    className="w-full py-2.5 px-4 bg-white hover:bg-slate-100 text-slate-900 font-bold rounded-xl text-xs flex items-center justify-center gap-2 shadow-md transition-all cursor-pointer"
+                  >
+                    <LogIn className="w-4 h-4 text-indigo-600" /> Đăng nhập Google để lưu dữ liệu đám mây
+                  </button>
+                ) : null}
+
+                {/* Ô dán Firebase Config snippet */}
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-semibold text-slate-400 flex items-center justify-between">
+                    <span>Dán mã cấu hình từ Firebase Console:</span>
+                    <span className="text-[10px] text-cyan-400 font-normal">Hỗ trợ JS Object & JSON</span>
+                  </label>
+                  <textarea
+                    rows={5}
+                    value={firebaseSnippet}
+                    onChange={(e) => setFirebaseSnippet(e.target.value)}
+                    placeholder={`const firebaseConfig = {\n  apiKey: "AIzaSy...",\n  authDomain: "your-project.firebaseapp.com",\n  projectId: "your-project",\n  storageBucket: "your-project.appspot.com",\n  messagingSenderId: "...",\n  appId: "..."\n};`}
+                    className="w-full p-3 rounded-xl bg-slate-900 border border-slate-700 text-xs font-mono text-cyan-200 focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div className="flex justify-end gap-2 pt-1">
+                  <button onClick={() => setShowKeyModal(false)} className="px-4 py-2 rounded-xl bg-slate-800 text-xs cursor-pointer">
+                    Đóng
+                  </button>
+                  <button
+                    onClick={handleSaveFirebaseConfig}
+                    disabled={!firebaseSnippet.trim()}
+                    className="px-5 py-2 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl text-xs font-bold text-white flex items-center gap-1.5 shadow-md cursor-pointer"
+                  >
+                    <Flame className="w-3.5 h-3.5" /> Lưu Cấu Hình Firebase
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

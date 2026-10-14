@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { getActiveModel, setActiveModel, getActiveThinkingMode, setActiveThinkingMode } from '../../services/geminiService';
 
-export default function Sidebar({ activeTab, setActiveTab, onOpenApiKey }) {
+export default function Sidebar({ activeTab, setActiveTab, onOpenApiKey, currentUser }) {
   const [model, setModel] = useState(getActiveModel());
   const [thinkingMode, setThinkingMode] = useState(getActiveThinkingMode());
 
@@ -130,13 +130,34 @@ export default function Sidebar({ activeTab, setActiveTab, onOpenApiKey }) {
         <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
           <div className="bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 h-full w-full" />
         </div>
-        <button
-          onClick={onOpenApiKey}
-          className="w-full py-1.5 px-3 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-[11px] text-slate-300 flex items-center justify-center gap-1.5 border border-slate-700"
-        >
-          <Key className="w-3.5 h-3.5 text-cyan-400" />
-          <span>Cài đặt Gemini API Key</span>
-        </button>
+
+        {currentUser ? (
+          <div
+            onClick={onOpenApiKey}
+            className="p-2 rounded-xl bg-slate-950/80 border border-emerald-500/30 flex items-center gap-2 cursor-pointer hover:bg-slate-900 transition-all"
+            title="Bấm để xem tài khoản và cài đặt"
+          >
+            {currentUser.photoURL ? (
+              <img src={currentUser.photoURL} alt="Avatar" className="w-7 h-7 rounded-full border border-emerald-400" />
+            ) : (
+              <div className="w-7 h-7 rounded-full bg-indigo-600 flex items-center justify-center text-xs font-bold text-white">
+                {(currentUser.displayName || currentUser.email || 'U')[0].toUpperCase()}
+              </div>
+            )}
+            <div className="flex-1 overflow-hidden">
+              <p className="text-[11px] font-semibold text-white truncate">{currentUser.displayName || 'Học viên'}</p>
+              <p className="text-[9px] text-emerald-400 truncate">🔥 Đã kết nối Firebase</p>
+            </div>
+          </div>
+        ) : (
+          <button
+            onClick={onOpenApiKey}
+            className="w-full py-1.5 px-3 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-[11px] text-slate-300 flex items-center justify-center gap-1.5 border border-slate-700"
+          >
+            <Key className="w-3.5 h-3.5 text-cyan-400" />
+            <span>Cài đặt Gemini & Firebase</span>
+          </button>
+        )}
       </div>
     </aside>
   );

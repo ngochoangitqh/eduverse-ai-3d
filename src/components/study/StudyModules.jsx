@@ -1,10 +1,11 @@
 import React, { useState, useRef } from 'react';
 import { Type } from '@google/genai';
 import { renderMarkdownWithMath } from '../../utils/mathRenderer';
-import { Image as ImageIcon, X, Paperclip, Upload, RotateCcw } from 'lucide-react';
+import { Image as ImageIcon, X, Paperclip, Upload, RotateCcw, Cloud } from 'lucide-react';
 import { generateText, generateStream, generateChatStream, generateJSON, formatAIError, getActiveThinkingMode, setActiveThinkingMode } from '../../services/geminiService';
 import { CHATBOT_SYSTEM_INSTRUCTION, SOLVER_SYSTEM_INSTRUCTION } from '../../config/systemInstructions';
 import { createSpeechRecognizer } from '../../services/speechService';
+import { saveSolutionToCloud, saveChatSessionToCloud, getCurrentUser } from '../../services/firebaseService';
 
 function fileToBase64(file) {
   return new Promise((resolve, reject) => {
@@ -123,6 +124,24 @@ export function ChatbotView() {
     }
   };
 
+  const handleSaveToCloud = async () => {
+    const user = getCurrentUser();
+    if (!user) {
+      alert('Vui lòng đăng nhập Google ở menu bên trái (Cài đặt) để đồng bộ dữ liệu lên Firebase Cloud!');
+      return;
+    }
+    if (messages.length <= 1) {
+      alert('Chưa có nội dung trao đổi nào để lưu!');
+      return;
+    }
+    try {
+      await saveChatSessionToCloud(messages);
+      alert('✅ Đã lưu phiên chat thành công lên Cloud Firestore!');
+    } catch (e) {
+      alert('Lỗi lưu đám mây: ' + (e.message || e));
+    }
+  };
+
   const userTurnCount = messages.filter((m) => m.role === 'user').length;
 
   return (
@@ -156,8 +175,16 @@ export function ChatbotView() {
 
         <div className="flex items-center gap-2">
           <button
+            onClick={handleSaveToCloud}
+            className="text-xs text-amber-300 hover:text-white bg-amber-950/40 hover:bg-amber-900/60 px-3 py-1.5 rounded-xl border border-amber-500/30 flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
+            title="Lưu toàn bộ phiên trao đổi này lên Firebase Cloud"
+          >
+            <Cloud className="w-3.5 h-3.5 text-amber-400" />
+            <span>Lưu Cloud</span>
+          </button>
+          <button
             onClick={handleResetChat}
-            className="text-xs text-slate-300 hover:text-white bg-slate-900/90 hover:bg-slate-800 px-3 py-1.5 rounded-xl border border-slate-700 flex items-center gap-1.5 transition-all shadow-sm"
+            className="text-xs text-slate-300 hover:text-white bg-slate-900/90 hover:bg-slate-800 px-3 py-1.5 rounded-xl border border-slate-700 flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
             title="Làm mới cuộc trò chuyện để bắt đầu chủ đề mới"
           >
             <RotateCcw className="w-3.5 h-3.5 text-cyan-400" />
@@ -325,6 +352,26 @@ export function SolverView() {
     }
   };
 
+  const handleSaveSolutionToCloud = async () => {
+    const user = getCurrentUser();
+    if (!user) {
+      alert('Vui lòng đăng nhập Google ở menu bên trái (Cài đặt) để đồng bộ bài giải lên Firebase Cloud!');
+      return;
+    }
+    if (!solution) return;
+    try {
+      await saveSolutionToCloud({
+        problem: problem || 'Đề bài qua hình ảnh',
+        solution,
+        hasImage: Boolean(attachedImage),
+        thinkingMode: solverThinkingMode,
+      });
+      alert('✅ Đã lưu bài giải thành công lên Cloud Firestore!');
+    } catch (e) {
+      alert('Lỗi lưu bài giải: ' + (e.message || e));
+    }
+  };
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6" onPaste={handlePaste}>
       <div className="glass-panel rounded-2xl p-6 space-y-4">
@@ -419,7 +466,19 @@ export function SolverView() {
       </div>
       <div className="glass-panel rounded-2xl p-6 overflow-y-auto max-h-[75vh]">
         <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-800">
-          <h3 className="font-bold text-cyan-400">Lời Giải Từ AI:</h3>
+          <div className="flex items-center gap-2">
+            <h3 className="font-bold text-cyan-400">Lời Giải Từ AI:</h3>
+            {solution && (
+              <button
+                onClick={handleSaveSolutionToCloud}
+                className="text-[11px] px-2.5 py-0.5 rounded-full font-medium text-amber-300 bg-amber-950/40 hover:bg-amber-900/60 border border-amber-500/30 flex items-center gap-1 transition-all cursor-pointer"
+                title="Lưu bài giải này lên Firebase Cloud"
+              >
+                <Cloud className="w-3 h-3 text-amber-400" />
+                <span>Lưu Cloud</span>
+              </button>
+            )}
+          </div>
           <span className={`text-[11px] px-2.5 py-0.5 rounded-full font-medium ${
             solverThinkingMode === 'deep'
               ? 'bg-purple-500/10 text-purple-300 border border-purple-500/30'
