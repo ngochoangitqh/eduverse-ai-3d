@@ -3,7 +3,7 @@ import { Type } from '@google/genai';
 import { renderMarkdownWithMath } from '../../utils/mathRenderer';
 import {
   Image as ImageIcon, X, Paperclip, Upload, RotateCcw, Cloud,
-  Plus, Trash2, MessageSquare, History, ChevronLeft, ChevronRight, BookOpen
+  Plus, Trash2, MessageSquare, History, ChevronLeft, ChevronRight, BookOpen, Brain
 } from 'lucide-react';
 import { generateText, generateStream, generateChatStream, generateJSON, formatAIError, getActiveThinkingMode, setActiveThinkingMode } from '../../services/geminiService';
 import { CHATBOT_SYSTEM_INSTRUCTION, SOLVER_SYSTEM_INSTRUCTION } from '../../config/systemInstructions';
@@ -13,7 +13,9 @@ import {
   saveChatSessionToCloud,
   updateChatSessionInCloud,
   deleteChatSessionFromCloud,
-  getCurrentUser
+  getCurrentUser,
+  subscribeToAuthChanges,
+  getSavedChatSessionsFromCloud
 } from '../../services/firebaseService';
 import {
   getStoredDocuments,
@@ -21,6 +23,12 @@ import {
   searchRelevantChunks,
   buildRAGContextPrompt
 } from '../../services/ragService';
+import {
+  getCollectiveWisdomPrompt,
+  distillInsightFromConversation,
+  getStoredCollectiveInsights
+} from '../../services/collectiveLearningService';
+import CollectiveBrainModal from './CollectiveBrainModal';
 
 function fileToBase64(file) {
   return new Promise((resolve, reject) => {
@@ -35,8 +43,10 @@ function fileToBase64(file) {
   });
 }
 
-// 1. CHATBOT GIA SƯ (Multi-session, Persistent History, Cloud Sync)
-const CHAT_STORAGE_KEY = 'EDUVERSE_CHAT_SESSIONS_V2';
+// 1. CHATBOT GIA SƯ (Multi-session, Per-User Private History, Collective Learning)
+function getUserChatStorageKey(user) {
+  return user?.uid ? `EDUVERSE_CHAT_SESSIONS_${user.uid}` : 'EDUVERSE_CHAT_SESSIONS_guest';
+}
 
 function createDefaultSession(title = 'Đoạn chat mới') {
   return {
@@ -50,9 +60,10 @@ function createDefaultSession(title = 'Đoạn chat mới') {
   };
 }
 
-function getInitialChatSessions() {
+function loadSessionsForUser(user) {
+  const key = getUserChatStorageKey(user);
   try {
-    const raw = localStorage.getItem(CHAT_STORAGE_KEY);
+    const raw = localStorage.getItem(key);
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
@@ -66,9 +77,12 @@ function getInitialChatSessions() {
 }
 
 export function ChatbotView() {
-  const [sessions, setSessions] = useState(getInitialChatSessions);
+  const [currentUser, setCurrentUser] = useState(getCurrentUser);
+  const [sessions, setSessions] = useState(() => loadSessionsForUser(getCurrentUser()));
   const [activeSessionId, setActiveSessionId] = useState(() => sessions[0]?.id || '');
   const [showHistory, setShowHistory] = useState(true);
+  const [showCollectiveBrain, setShowCollectiveBrain] = useState(false);
+  const [collectiveCount, setCollectiveCount] = useState(() => getStoredCollectiveInsights().length);
   const [input, setInput] = useState('');
   const [attachedImage, setAttachedImage] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -78,14 +92,59 @@ export function ChatbotView() {
   const fileInputRef = useRef(null);
   const messagesEndRef = useRef(null);
 
-  // Lưu sessions vào localStorage mỗi khi có thay đổi
+  // Lắng nghe đăng nhập/đổi tài khoản để nạp đúng lịch sử chat riêng của từng người dùng
+  useEffect(() => {
+    const unsub = subscribeToAuthChanges(async (user) => {
+      setCurrentUser(user);
+      const userSessions = loadSessionsForUser(user);
+      setSessions(userSessions);
+      setActiveSessionId(userSessions[0]?.id || '');
+
+      // Nếu đã đăng nhập Firebase, tải thêm các phiên đã lưu từ Cloud của tài khoản đó
+      if (user?.uid) {
+        try {
+          const cloudSessions = await getSavedChatSessionsFromCloud(15);
+          if (cloudSessions && cloudSessions.length > 0) {
+            setSessions((prev) => {
+              const map = new Map();
+              cloudSessions.forEach((cs) => {
+                map.set(cs.id, {
+                  id: cs.id,
+                  title: cs.title || 'Đoạn chat',
+                  createdAt: cs.updatedAt?.toMillis ? cs.updatedAt.toMillis() : Date.now(),
+                  updatedAt: cs.updatedAt?.toMillis ? cs.updatedAt.toMillis() : Date.now(),
+                  messages: cs.messages || [],
+                });
+              });
+              prev.forEach((ls) => {
+                if (!map.has(ls.id)) {
+                  map.set(ls.id, ls);
+                }
+              });
+              const merged = Array.from(map.values());
+              try {
+                localStorage.setItem(getUserChatStorageKey(user), JSON.stringify(merged));
+              } catch (e) {}
+              return merged;
+            });
+          }
+        } catch (err) {
+          console.warn('Đồng bộ chat Firestore bị hoãn:', err);
+        }
+      }
+    });
+    return () => unsub();
+  }, []);
+
+  // Lưu sessions vào localStorage theo đúng user
   useEffect(() => {
     try {
-      localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(sessions));
+      const key = getUserChatStorageKey(currentUser);
+      localStorage.setItem(key, JSON.stringify(sessions));
     } catch (e) {
       console.error('Lỗi ghi sessions vào localStorage:', e);
     }
-  }, [sessions]);
+  }, [sessions, currentUser]);
 
   // Đảm bảo activeSessionId luôn hợp lệ
   useEffect(() => {
@@ -241,14 +300,20 @@ export function ChatbotView() {
     const promptText = ragContext ? `${basePrompt}\n\n${ragContext}` : basePrompt;
 
     let streamed = false;
+    let finalAiAnswer = '';
     try {
+      // Kết hợp System Instruction chuẩn và Trí Tuệ Cộng Hưởng tích lũy từ tất cả học sinh
+      const collectiveWisdom = getCollectiveWisdomPrompt(6);
+      const dynamicSystemInstruction = CHATBOT_SYSTEM_INSTRUCTION + collectiveWisdom;
+
       await generateChatStream({
         messages: updatedMessages,
         newPrompt: promptText,
         imagePart,
-        systemInstruction: CHATBOT_SYSTEM_INSTRUCTION,
+        systemInstruction: dynamicSystemInstruction,
         thinkingMode,
         onChunk: (currentText) => {
+          finalAiAnswer = currentText;
           if (!streamed) {
             streamed = true;
             setLoading(false);
@@ -274,6 +339,17 @@ export function ChatbotView() {
           }
         },
       });
+
+      // Tự động phân tích và học hỏi bài học ẩn danh đưa vào Bộ Não Cộng Đồng
+      if (userMsg && finalAiAnswer && finalAiAnswer.length > 50) {
+        distillInsightFromConversation(userMsg, finalAiAnswer)
+          .then((newInsight) => {
+            if (newInsight) {
+              setCollectiveCount(getStoredCollectiveInsights().length);
+            }
+          })
+          .catch(() => {});
+      }
 
       // Tự động đồng bộ lên Firebase nếu người dùng đã đăng nhập
       const user = getCurrentUser();
@@ -423,11 +499,30 @@ export function ChatbotView() {
               <h2 className="text-base sm:text-lg font-bold truncate text-slate-100 max-w-[200px] sm:max-w-xs">
                 {activeSession.title || 'AI Chatbot Gia Sư'}
               </h2>
-              <span className="text-[11px] text-cyan-300 bg-cyan-500/10 border border-cyan-500/30 px-2.5 py-0.5 rounded-full font-medium hidden sm:flex items-center gap-1.5 shrink-0">
+              <span className="text-[11px] text-cyan-300 bg-cyan-500/10 border border-cyan-500/30 px-2 py-0.5 rounded-full font-medium hidden sm:flex items-center gap-1.5 shrink-0">
                 <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
                 {userTurnCount} lượt
               </span>
+              <span
+                className={`text-[10px] px-2 py-0.5 rounded-full font-medium hidden md:flex items-center gap-1 shrink-0 ${
+                  currentUser
+                    ? 'text-emerald-300 bg-emerald-500/10 border border-emerald-500/30'
+                    : 'text-slate-400 bg-slate-800 border border-slate-700'
+                }`}
+                title={currentUser ? `Lịch sử chat cá nhân riêng biệt của: ${currentUser.email}` : 'Chế độ khách. Đăng nhập để bảo vệ & đồng bộ lịch sử riêng!'}
+              >
+                <span>{currentUser ? `🔒 ${currentUser.displayName || currentUser.email?.split('@')[0]}` : '👤 Khách'}</span>
+              </span>
             </div>
+
+            <button
+              onClick={() => setShowCollectiveBrain(true)}
+              className="text-[11px] px-2.5 py-1 rounded-full font-semibold flex items-center gap-1.5 border transition-all cursor-pointer bg-gradient-to-r from-purple-500/20 to-pink-500/20 text-purple-300 border-purple-500/40 hover:from-purple-500/30 hover:to-pink-500/30 shadow-sm shrink-0"
+              title="Xem Bộ Não Trí Tuệ Cộng Hưởng: AI học hỏi từ tất cả học sinh để trở nên thông minh hơn"
+            >
+              <Brain className="w-3.5 h-3.5 text-purple-400 animate-pulse" />
+              <span>Trí Tuệ Cộng Hưởng ({collectiveCount})</span>
+            </button>
 
             <button
               onClick={() => {
@@ -573,6 +668,12 @@ export function ChatbotView() {
           </button>
         </div>
       </div>
+
+      {/* Modal Trí Tuệ Cộng Hưởng */}
+      <CollectiveBrainModal
+        isOpen={showCollectiveBrain}
+        onClose={() => setShowCollectiveBrain(false)}
+      />
     </div>
   );
 }

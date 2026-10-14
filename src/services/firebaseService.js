@@ -286,3 +286,38 @@ export const uploadProblemImage = async (file) => {
   await uploadBytes(fileRef, file);
   return await getDownloadURL(fileRef);
 };
+
+/**
+ * ====================================================
+ * 4. TRÍ TUỆ CỘNG HƯỞNG (COLLECTIVE INTELLIGENCE FIRESTORE)
+ * Lưu và tải các bài học, bẫy thi học hỏi từ tất cả học sinh
+ * ====================================================
+ */
+
+export const saveCollectiveInsightToCloud = async (insightData) => {
+  if (!db) return null;
+  try {
+    const colRef = collection(db, 'collective_insights');
+    const docRef = await addDoc(colRef, {
+      ...insightData,
+      createdAt: serverTimestamp(),
+    });
+    return docRef.id;
+  } catch (err) {
+    console.warn('Lỗi lưu collective insight:', err);
+    return null;
+  }
+};
+
+export const getCollectiveInsightsFromCloud = async (maxCount = 30) => {
+  if (!db) return [];
+  try {
+    const colRef = collection(db, 'collective_insights');
+    const q = query(colRef, orderBy('createdAt', 'desc'), limit(maxCount));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+  } catch (err) {
+    console.warn('Lỗi tải collective insights từ Firestore:', err);
+    return [];
+  }
+};
