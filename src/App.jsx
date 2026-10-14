@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   Sparkles, MessageSquare, Mic, Layers, Camera,
   Presentation, Zap, Ear, Network, Languages, Key,
-  Flame, CheckCircle, AlertCircle, LogIn, LogOut, User, BookOpen
+  Flame, CheckCircle, AlertCircle, LogIn, LogOut, User, BookOpen, Cpu
 } from 'lucide-react';
 import NeuralBackground3D from './components/three/NeuralBackground3D';
 import KnowledgeCore3D from './components/three/KnowledgeCore3D';
@@ -11,6 +11,7 @@ import Sidebar from './components/layout/Sidebar';
 import EnglishCenterView from './components/english/EnglishCenterView';
 import AuthModal from './components/auth/AuthModal';
 import RAGKnowledgeView from './components/study/RAGKnowledgeView';
+import AILabLaboratory from './components/ailab/AILabLaboratory';
 import {
   ChatbotView, SolverView, SlideGenView, SummarizerView,
   MeetingTrackerView, QuizMakerView, MindmapView, RoadmapView
@@ -213,6 +214,16 @@ export default function App() {
                     Nhận diện giọng nói chấm phát âm, Flashcard 3D theo chủ đề, chấm Writing chi tiết và giải thích ngữ pháp.
                   </p>
                 </TiltCard>
+
+                <TiltCard onClick={() => setActiveTab('ailab')} className="border-emerald-500/40">
+                  <div className="w-11 h-11 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center mb-4">
+                    <Cpu className="w-5 h-5 text-emerald-400" />
+                  </div>
+                  <h4 className="font-display font-bold text-base mb-1 text-emerald-300">Phòng Thí Nghiệm AI (CLO2 • CLO3)</h4>
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    Trọn bộ 4 trụ cột thuật toán cốt lõi: Naïve Bayes, K-Means từ vựng, Genetic Algorithm CSP và Hệ chuyên gia suy diễn luật.
+                  </p>
+                </TiltCard>
               </div>
             </div>
           </div>
@@ -230,6 +241,7 @@ export default function App() {
         {activeTab === 'english' && (
           <EnglishCenterView englishMode={englishMode} setEnglishMode={setEnglishMode} />
         )}
+        {activeTab === 'ailab' && <AILabLaboratory />}
       </main>
 
       {/* Modal cài đặt API Key & Firebase */}

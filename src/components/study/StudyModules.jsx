@@ -29,6 +29,8 @@ import {
   getStoredCollectiveInsights
 } from '../../services/collectiveLearningService';
 import CollectiveBrainModal from './CollectiveBrainModal';
+import { GeneticExamGeneratorCSP, SAMPLE_QUESTION_BANK } from '../../services/aiAlgorithms/geneticExamGenerator';
+import { createSampleSemanticNetwork } from '../../services/aiAlgorithms/expertSystemSemanticNet';
 
 function fileToBase64(file) {
   return new Promise((resolve, reject) => {
@@ -1113,17 +1115,58 @@ export function QuizMakerView() {
     setLoading(false);
   };
 
+  const createGeneticExam = () => {
+    setLoading(true);
+    setTimeout(() => {
+      const ga = new GeneticExamGeneratorCSP({
+        questionBank: SAMPLE_QUESTION_BANK,
+        targetNumQuestions: 5,
+        targetDifficulty: { easy: 0.4, medium: 0.4, hard: 0.2 },
+        targetDurationMinutes: 8,
+        requiredTopics: ['Toán Học', 'Vật Lý', 'Hóa Học', 'Tiếng Anh'],
+        populationSize: 30,
+        maxGenerations: 40
+      });
+      const res = ga.runEvolution();
+      const formatted = res.optimalExam.map((q) => {
+        const fakeDistractors = [
+          'Phương án gây nhiễu 1',
+          'Phương án gây nhiễu 2',
+          'Phương án chưa chính xác'
+        ];
+        const allOpts = [q.answer, ...fakeDistractors].sort(() => Math.random() - 0.5);
+        return {
+          question: `[${q.topic} • ${q.difficulty.toUpperCase()}] ${q.text}`,
+          options: allOpts,
+          answerIndex: allOpts.indexOf(q.answer),
+          explanation: `Giải thuật di truyền CSP đã chọn lọc câu hỏi này thỏa mãn tỷ lệ độ khó và độ phủ môn học. Đáp án chuẩn là: "${q.answer}".`
+        };
+      });
+      setQuestions(formatted);
+      setSelected({});
+      setTopic('Đề Thi Tối Ưu Đa Môn (Sinh Bằng Giải Thuật Di Truyền GA & CSP - CLO2)');
+      setLoading(false);
+    }, 150);
+  };
+
   return (
     <div className="space-y-6">
-      <div className="glass-panel rounded-2xl p-6 flex gap-4">
+      <div className="glass-panel rounded-2xl p-6 flex flex-col md:flex-row gap-3">
         <input
           value={topic}
           onChange={(e) => setTopic(e.target.value)}
           placeholder="Nhập chủ đề tạo Quiz (VD: Mạng máy tính OSI, Lập trình OOP)..."
-          className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm"
+          className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white"
         />
-        <button onClick={createQuiz} disabled={loading} className="px-6 py-3 bg-indigo-600 rounded-xl font-bold text-sm">
+        <button onClick={createQuiz} disabled={loading} className="px-5 py-3 bg-indigo-600 hover:bg-indigo-500 rounded-xl font-bold text-sm text-white cursor-pointer shrink-0">
           {loading ? 'Đang tạo đề...' : 'Tạo Đề Quiz'}
+        </button>
+        <button
+          onClick={createGeneticExam}
+          disabled={loading}
+          className="px-5 py-3 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 rounded-xl font-bold text-sm text-white flex items-center justify-center gap-1.5 shadow-lg shadow-purple-500/20 shrink-0 cursor-pointer"
+        >
+          🧬 Sinh Bằng GA & CSP (CLO2)
         </button>
       </div>
       <div className="space-y-4">
@@ -1196,17 +1239,39 @@ export function MindmapView() {
     setLoading(false);
   };
 
+  const loadSemanticNetworkMindmap = () => {
+    const net = createSampleSemanticNetwork();
+    const tree = net.exportToMindmap('math');
+    if (tree) {
+      const formatted = {
+        root: tree.label + ' (Mạng Ngữ Nghĩa Tri Thức)',
+        branches: (tree.children || []).map((b) => ({
+          title: `[${b.edgeLabel || b.relationToParent}] ${b.label}`,
+          items: (b.children || []).map((c) => `[${c.edgeLabel || c.relationToParent}] ${c.label} ${c.properties?.formula ? `(${c.properties.formula})` : ''}`)
+        }))
+      };
+      setMindmap(formatted);
+      setTopic('Mạng Ngữ Nghĩa Tri Thức Toán Học (CLO2)');
+    }
+  };
+
   return (
     <div className="space-y-6">
-      <div className="glass-panel rounded-2xl p-6 flex gap-4">
+      <div className="glass-panel rounded-2xl p-6 flex flex-col md:flex-row gap-3">
         <input
           value={topic}
           onChange={(e) => setTopic(e.target.value)}
           placeholder="Nhập chủ đề cần vẽ Sơ đồ tư duy..."
-          className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm"
+          className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white"
         />
-        <button onClick={createMindmap} disabled={loading} className="px-6 py-3 bg-indigo-600 rounded-xl font-bold text-sm">
+        <button onClick={createMindmap} disabled={loading} className="px-5 py-3 bg-indigo-600 hover:bg-indigo-500 rounded-xl font-bold text-sm text-white cursor-pointer shrink-0">
           {loading ? 'Đang vẽ...' : 'Vẽ Mindmap'}
+        </button>
+        <button
+          onClick={loadSemanticNetworkMindmap}
+          className="px-5 py-3 bg-gradient-to-r from-teal-600 to-cyan-600 hover:from-teal-500 hover:to-cyan-500 rounded-xl font-bold text-sm text-white flex items-center justify-center gap-1.5 shadow-lg shadow-teal-500/20 shrink-0 cursor-pointer"
+        >
+          🕸️ Nạp Mạng Ngữ Nghĩa (CLO2)
         </button>
       </div>
 

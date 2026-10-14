@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   Compass, Bot, Calculator, Presentation, FileText,
-  Mic, HelpCircle, GitBranch, Map, Globe, Box, Key, User, BookOpen
+  Mic, HelpCircle, GitBranch, Map, Globe, Box, Key, User, BookOpen, Cpu
 } from 'lucide-react';
 import { getActiveModel, setActiveModel, getActiveThinkingMode, setActiveThinkingMode } from '../../services/geminiService';
 
@@ -90,6 +90,20 @@ export default function Sidebar({ activeTab, setActiveTab, onOpenApiKey, onOpenA
           <div className="text-left">
             <div>Trung Tâm Tiếng Anh</div>
             <div className="text-[10px] text-cyan-300/80 font-normal">IELTS • TOEIC • Phổ Thông</div>
+          </div>
+        </button>
+
+        <div className="px-3 pt-4 pb-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">
+          Nghiên Cứu & Thuật Toán
+        </div>
+        <button
+          onClick={() => setActiveTab('ailab')}
+          className={`nav-item ${activeTab === 'ailab' ? 'active' : ''} w-full flex items-center gap-3 px-3.5 py-3 rounded-xl text-sm font-semibold text-slate-200 hover:text-white bg-gradient-to-r from-cyan-950/40 to-indigo-950/40 border border-cyan-500/30 transition-all`}
+        >
+          <Cpu className="w-4 h-4 text-emerald-400" />
+          <div className="text-left">
+            <div>Phòng Thí Nghiệm AI</div>
+            <div className="text-[10px] text-emerald-300 font-normal">CLO2 • CLO3 • 4 Trụ Cột AI</div>
           </div>
         </button>
       </nav>
