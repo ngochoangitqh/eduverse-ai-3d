@@ -53,6 +53,12 @@ function getUserChatStorageKey(user) {
   return user?.uid ? `EDUVERSE_CHAT_SESSIONS_${user.uid}` : 'EDUVERSE_CHAT_SESSIONS_guest';
 }
 
+function isMeaningfulSession(session) {
+  if (!session || !Array.isArray(session.messages)) return false;
+  // Phiên có tin nhắn của người dùng hoặc có hơn 1 tin nhắn
+  return session.messages.some((m) => m.role === 'user') || session.messages.length > 1;
+}
+
 function createDefaultSession(title = 'Đoạn chat mới') {
   return {
     id: 'chat_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
@@ -66,25 +72,74 @@ function createDefaultSession(title = 'Đoạn chat mới') {
 }
 
 function loadSessionsForUser(user) {
-  const key = getUserChatStorageKey(user);
+  const userKey = getUserChatStorageKey(user);
+  let loadedSessions = [];
   try {
-    const raw = localStorage.getItem(key);
+    const raw = localStorage.getItem(userKey);
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
+        loadedSessions = parsed;
       }
     }
   } catch (e) {
     console.error('Lỗi đọc lịch sử chat từ localStorage:', e);
   }
+
+  // Nếu người dùng vừa đăng nhập tài khoản (user.uid), kiểm tra xem trước đó ở chế độ Khách có đoạn chat nào không
+  if (user?.uid) {
+    try {
+      const guestRaw = localStorage.getItem('EDUVERSE_CHAT_SESSIONS_guest');
+      if (guestRaw) {
+        const guestParsed = JSON.parse(guestRaw);
+        if (Array.isArray(guestParsed)) {
+          const meaningfulGuest = guestParsed.filter(isMeaningfulSession);
+          if (meaningfulGuest.length > 0) {
+            const existingIds = new Set(loadedSessions.map((s) => s.id));
+            const toMerge = meaningfulGuest.filter((s) => !existingIds.has(s.id));
+            if (toMerge.length > 0) {
+              loadedSessions = [...toMerge, ...loadedSessions];
+              try {
+                localStorage.setItem(userKey, JSON.stringify(loadedSessions));
+              } catch (_) {}
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Lỗi di chuyển chat từ khách:', e);
+    }
+  }
+
+  if (loadedSessions.length > 0) {
+    return loadedSessions;
+  }
+
+  // Nếu tài khoản mới chưa có chat gì, lấy phiên từ khách thay vì bắt chat lại từ đầu
+  try {
+    const guestRaw = localStorage.getItem('EDUVERSE_CHAT_SESSIONS_guest');
+    if (guestRaw) {
+      const guestParsed = JSON.parse(guestRaw);
+      if (Array.isArray(guestParsed) && guestParsed.length > 0) {
+        return guestParsed;
+      }
+    }
+  } catch (_) {}
+
   return [createDefaultSession()];
 }
 
 export function ChatbotView() {
   const [currentUser, setCurrentUser] = useState(getCurrentUser);
   const [sessions, setSessions] = useState(() => loadSessionsForUser(getCurrentUser()));
-  const [activeSessionId, setActiveSessionId] = useState(() => sessions[0]?.id || '');
+  const [activeSessionId, setActiveSessionId] = useState(() => {
+    const savedActive = localStorage.getItem('EDUVERSE_ACTIVE_SESSION_ID');
+    const initialSessions = loadSessionsForUser(getCurrentUser());
+    if (savedActive && initialSessions.some((s) => s.id === savedActive)) {
+      return savedActive;
+    }
+    return initialSessions[0]?.id || '';
+  });
   const [showHistory, setShowHistory] = useState(true);
   const [showCollectiveBrain, setShowCollectiveBrain] = useState(false);
   const [collectiveCount, setCollectiveCount] = useState(() => getStoredCollectiveInsights().length);
@@ -97,35 +152,81 @@ export function ChatbotView() {
   const fileInputRef = useRef(null);
   const messagesEndRef = useRef(null);
 
-  // Lắng nghe đăng nhập/đổi tài khoản để nạp đúng lịch sử chat riêng của từng người dùng
+  // LẮNG NGHE ĐĂNG NHẬP / ĐĂNG KÝ: BẢO VỆ TUYỆT ĐỐI KHÔNG XÓA ĐOẠN CHAT HIỆN TẠI
   useEffect(() => {
     const unsub = subscribeToAuthChanges(async (user) => {
       setCurrentUser(user);
-      const userSessions = loadSessionsForUser(user);
-      setSessions(userSessions);
-      setActiveSessionId(userSessions[0]?.id || '');
 
-      // Nếu đã đăng nhập Firebase, tải thêm các phiên đã lưu từ Cloud của tài khoản đó
+      // Cập nhật sessions bằng hàm callback để giữ lại toàn bộ đoạn chat đang thực hiện
+      setSessions((currentSessions) => {
+        // Nạp các phiên đã lưu của tài khoản vừa đăng nhập
+        const accountSessions = loadSessionsForUser(user);
+
+        const sessionMap = new Map();
+
+        // 1. Giữ nguyên các phiên hiện tại người dùng đang chat dở dang (không bắt chat lại từ đầu)
+        currentSessions.forEach((s) => {
+          sessionMap.set(s.id, s);
+        });
+
+        // 2. Hợp nhất các phiên lịch sử của tài khoản đó vào
+        accountSessions.forEach((s) => {
+          if (!sessionMap.has(s.id)) {
+            sessionMap.set(s.id, s);
+          } else {
+            const current = sessionMap.get(s.id);
+            // Giữ phiên bản có nhiều tin nhắn hơn
+            if ((s.messages?.length || 0) > (current.messages?.length || 0)) {
+              sessionMap.set(s.id, s);
+            }
+          }
+        });
+
+        const merged = Array.from(sessionMap.values());
+        const finalSessions = merged.length > 0 ? merged : [createDefaultSession()];
+
+        // Lưu ngay vào localStorage của tài khoản mới
+        try {
+          localStorage.setItem(getUserChatStorageKey(user), JSON.stringify(finalSessions));
+        } catch (_) {}
+
+        // Bảo toàn activeSessionId: Nếu phiên đang chat vẫn tồn tại thì giữ nguyên không đổi
+        setActiveSessionId((prevActiveId) => {
+          if (prevActiveId && finalSessions.some((s) => s.id === prevActiveId)) {
+            localStorage.setItem('EDUVERSE_ACTIVE_SESSION_ID', prevActiveId);
+            return prevActiveId;
+          }
+          const newActiveId = finalSessions[0]?.id || '';
+          localStorage.setItem('EDUVERSE_ACTIVE_SESSION_ID', newActiveId);
+          return newActiveId;
+        });
+
+        return finalSessions;
+      });
+
+      // Nếu đã đăng nhập Firebase, đồng bộ thêm các phiên từ Cloud của tài khoản đó
       if (user?.uid) {
         try {
-          const cloudSessions = await getSavedChatSessionsFromCloud(15);
+          const cloudSessions = await getSavedChatSessionsFromCloud(20);
           if (cloudSessions && cloudSessions.length > 0) {
             setSessions((prev) => {
               const map = new Map();
+              // Giữ các phiên local hiện có
+              prev.forEach((ls) => map.set(ls.id, ls));
+
+              // Bổ sung các phiên từ Cloud nếu chưa có
               cloudSessions.forEach((cs) => {
-                map.set(cs.id, {
-                  id: cs.id,
-                  title: cs.title || 'Đoạn chat',
-                  createdAt: cs.updatedAt?.toMillis ? cs.updatedAt.toMillis() : Date.now(),
-                  updatedAt: cs.updatedAt?.toMillis ? cs.updatedAt.toMillis() : Date.now(),
-                  messages: cs.messages || [],
-                });
-              });
-              prev.forEach((ls) => {
-                if (!map.has(ls.id)) {
-                  map.set(ls.id, ls);
+                if (!map.has(cs.id)) {
+                  map.set(cs.id, {
+                    id: cs.id,
+                    title: cs.title || 'Đoạn chat',
+                    createdAt: cs.updatedAt?.toMillis ? cs.updatedAt.toMillis() : Date.now(),
+                    updatedAt: cs.updatedAt?.toMillis ? cs.updatedAt.toMillis() : Date.now(),
+                    messages: cs.messages || [],
+                  });
                 }
               });
+
               const merged = Array.from(map.values());
               try {
                 localStorage.setItem(getUserChatStorageKey(user), JSON.stringify(merged));
@@ -146,17 +247,24 @@ export function ChatbotView() {
     try {
       const key = getUserChatStorageKey(currentUser);
       localStorage.setItem(key, JSON.stringify(sessions));
+      // Nếu đang ở chế độ khách, cũng đồng thời lưu một bản dự phòng
+      if (!currentUser?.uid) {
+        localStorage.setItem('EDUVERSE_CHAT_SESSIONS_guest', JSON.stringify(sessions));
+      }
     } catch (e) {
       console.error('Lỗi ghi sessions vào localStorage:', e);
     }
   }, [sessions, currentUser]);
 
-  // Đảm bảo activeSessionId luôn hợp lệ
+  // Đảm bảo activeSessionId luôn hợp lệ và lưu vào localStorage
   useEffect(() => {
     if (!sessions.some((s) => s.id === activeSessionId)) {
       if (sessions.length > 0) {
         setActiveSessionId(sessions[0].id);
+        localStorage.setItem('EDUVERSE_ACTIVE_SESSION_ID', sessions[0].id);
       }
+    } else {
+      localStorage.setItem('EDUVERSE_ACTIVE_SESSION_ID', activeSessionId);
     }
   }, [sessions, activeSessionId]);
 
