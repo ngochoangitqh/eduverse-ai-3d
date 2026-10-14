@@ -3,11 +3,13 @@ import { Type } from '@google/genai';
 import { renderMarkdownWithMath } from '../../utils/mathRenderer';
 import {
   Image as ImageIcon, X, Paperclip, Upload, RotateCcw, Cloud,
-  Plus, Trash2, MessageSquare, History, ChevronLeft, ChevronRight, BookOpen, Brain
+  Plus, Trash2, MessageSquare, History, ChevronLeft, ChevronRight, BookOpen, Brain,
+  FileText, FileUp, Sparkles, Copy, Check, Download, Volume2, Presentation, Loader2,
+  Layers, AlertCircle, FileCheck
 } from 'lucide-react';
 import { generateText, generateStream, generateChatStream, generateJSON, formatAIError, getActiveThinkingMode, setActiveThinkingMode } from '../../services/geminiService';
 import { CHATBOT_SYSTEM_INSTRUCTION, SOLVER_SYSTEM_INSTRUCTION } from '../../config/systemInstructions';
-import { createSpeechRecognizer } from '../../services/speechService';
+import { createSpeechRecognizer, speakText } from '../../services/speechService';
 import {
   saveSolutionToCloud,
   saveChatSessionToCloud,
@@ -21,7 +23,8 @@ import {
   getStoredDocuments,
   getAllActiveChunks,
   searchRelevantChunks,
-  buildRAGContextPrompt
+  buildRAGContextPrompt,
+  extractTextFromFile
 } from '../../services/ragService';
 import {
   getCollectiveWisdomPrompt,
@@ -975,18 +978,176 @@ export function SlideGenView() {
   );
 }
 
-// 4. TÓM TẮT TÀI LIỆU / SLIDE
+// 4. TÓM TẮT TÀI LIỆU & SLIDE BÀI GIẢNG (HỖ TRỢ PPTX, PDF, DOCX, TXT, ẢNH SLIDE)
 export function SummarizerView() {
   const [content, setContent] = useState('');
   const [summary, setSummary] = useState('');
   const [loading, setLoading] = useState(false);
+  const [extracting, setExtracting] = useState(false);
+  const [summaryMode, setSummaryMode] = useState('comprehensive');
+  const [fileInfo, setFileInfo] = useState(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const fileInputRef = useRef(null);
+
+  // Xử lý khi người dùng chọn hoặc thả file tài liệu / slide
+  const handleFileProcess = async (file) => {
+    if (!file) return;
+    setExtracting(true);
+    try {
+      const result = await extractTextFromFile(file);
+      setContent(result.text);
+      setFileInfo({
+        name: file.name,
+        size: (file.size / 1024 / 1024).toFixed(2) + ' MB',
+        type: result.fileType,
+        pageCount: result.pageCount,
+        isImage: !!result.isImage,
+        imageDataUrl: result.imageDataUrl || null,
+        imagePart: result.imagePart || null
+      });
+      setSummary(''); // Xóa bản tóm tắt cũ
+    } catch (err) {
+      console.error('Lỗi trích xuất file:', err);
+      alert('Không thể trích xuất file: ' + err.message);
+    } finally {
+      setExtracting(false);
+    }
+  };
+
+  const handleFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (file) handleFileProcess(file);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) handleFileProcess(file);
+  };
+
+  const removeFile = () => {
+    setFileInfo(null);
+    setContent('');
+    setSummary('');
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  // Nạp slide bài giảng mẫu để thử nghiệm nhanh
+  const loadSampleSlide = () => {
+    const sampleText = `[--- SLIDE 1: GIỚI THIỆU TRÍ TUỆ NHÂN TẠO & HỌC MÁY ---]
+Chủ đề: Tổng quan về Artificial Intelligence (AI) và Machine Learning (ML).
+Mục tiêu bài giảng:
+1. Phân biệt Trí tuệ nhân tạo (AI), Học máy (ML) và Học sâu (Deep Learning).
+2. Nắm vững 3 mô hình học máy cơ bản: Có giám sát (Supervised), Không giám sát (Unsupervised), Tăng cường (Reinforcement).
+3. Ứng dụng thực tế của AI trong giáo dục, y tế và tự động hóa.
+
+[--- SLIDE 2: HỌC CÓ GIÁM SÁT (SUPERVISED LEARNING) ---]
+- Định nghĩa: Mô hình được huấn luyện trên tập dữ liệu đã được gán nhãn (Labeled Data) (đầu vào X và nhãn đúng Y).
+- Hai bài toán cốt lõi:
+  + Phân lớp (Classification): Dự đoán nhãn rời rạc (VD: Email Spam vs Non-spam, Khối u ác tính vs lành tính).
+  + Hồi quy (Regression): Dự đoán giá trị liên tục (VD: Dự đoán giá nhà, dự báo nhiệt độ ngày mai).
+- Thuật toán tiêu biểu: Linear Regression, Logistic Regression, Decision Tree, Random Forest, SVM.
+
+[--- SLIDE 3: HỌC KHÔNG GIÁM SÁT (UNSUPERVISED LEARNING) ---]
+- Định nghĩa: Mô hình tự tìm cấu trúc ẩn trong dữ liệu chưa gán nhãn (Unlabeled Data).
+- Hai bài toán tiêu biểu:
+  + Phân cụm (Clustering): Gom các điểm dữ liệu tương đồng vào nhóm (VD: K-Means phân khúc khách hàng).
+  + Giảm chiều dữ liệu (Dimensionality Reduction): Nén đặc trưng giữ lại phương sai lớn nhất (VD: PCA, t-SNE).
+
+[--- SLIDE 4: MẠNG NƠ-RON NHÂN TẠO & HỌC SÂU (DEEP LEARNING) ---]
+- Cấu trúc mạng Perceptron đa lớp (MLP): Input Layer, Hidden Layers, Output Layer.
+- Hàm kích hoạt (Activation Function): ReLU, Sigmoid, Softmax đưa tính phi tuyến tính vào mạng.
+- Quá trình huấn luyện:
+  + Lan truyền tiến (Forward Propagation): Tính toán dự đoán và hàm mất mát (Loss Function).
+  + Lan truyền ngược (Backpropagation) & Gradient Descent: Cập nhật trọng số W và bias b để tối thiểu hóa sai số.
+
+[--- SLIDE 5: KẾT LUẬN & ĐỊNH HƯỚNG ÔN THI ---]
+- Công thức trọng tâm cần nhớ: Hàm mất mát MSE cho hồi quy, Cross-Entropy Loss cho phân lớp.
+- Lưu ý bẫy đề thi: Hiện tượng quá khớp (Overfitting) khi mô hình quá phức tạp nhưng dữ liệu ít; biện pháp khắc phục: Regularization (L1/L2), Dropout, Data Augmentation.`;
+
+    setContent(sampleText);
+    setFileInfo({
+      name: 'Slide_Mau_Artificial_Intelligence_Overview.pptx',
+      size: '1.85 MB',
+      type: 'PPTX (PowerPoint)',
+      pageCount: 5,
+      isImage: false
+    });
+    setSummary('');
+  };
+
+  // Tạo prompt tóm tắt dựa theo chế độ
+  const buildPrompt = () => {
+    const fileHeader = fileInfo?.name ? `TÀI LIỆU / SLIDE NGUỒN: "${fileInfo.name}" (${fileInfo.type})\n` : '';
+
+    if (summaryMode === 'quick') {
+      return `Bạn là Chuyên gia Tóm tắt Slide và Tài liệu Cấp Tốc.
+${fileHeader}
+Nhiệm vụ: Hãy tóm tắt SIÊU NGẮN GỌN tài liệu/slide sau:
+1. 💡 **Thông Điệp Cốt Lõi Trong 1 Câu Duy Nhất**.
+2. ⚡ **5 Luận Điểm Then Chốt (Key Takeaways)**: 5 gạch đầu dòng rõ ràng, súc tích, đi thẳng vào bản chất.
+3. 🎯 **Ứng Dụng Thực Tiễn**: Ý nghĩa thực tiễn nổi bật nhất.
+
+Nội dung:
+${content}`;
+    }
+
+    if (summaryMode === 'exam') {
+      return `Bạn là Cố Vấn Học Tập & Giảng Viên Luyện Thi Xuất Sắc.
+${fileHeader}
+Nhiệm vụ: Phân tích tài liệu/slide sau dưới góc độ TRỌNG TÂM ĐỀ THI & KIỂM TRA:
+1. 🎯 **Các Định Lý, Công Thức & Khái Niệm Chắc Chắn Sẽ Ra Thi** (Định dạng công thức toán học chuẩn LaTeX giữa $...$ hoặc $$...$$).
+2. ⚠️ **Các Bẫy Sai Lầm Học Sinh Hay Mắc Phải & Cách Tránh**.
+3. 📝 **5 Câu Hỏi Trắc Nghiệm Ôn Tập** (Mỗi câu gồm 4 đáp án A, B, C, D, đáp án đúng in đậm và giải thích chi tiết).
+
+Nội dung:
+${content}`;
+    }
+
+    if (summaryMode === 'mindmap') {
+      return `Bạn là Chuyên gia Phương pháp Học Tập & Sơ Đồ Tư Duy.
+${fileHeader}
+Nhiệm vụ: Chuyển đổi toàn bộ tài liệu/slide sau thành ĐỀ CƯƠNG PHÂN CẤP SƠ ĐỒ TƯ DUY (Mindmap Outline) logic và sáng sủa:
+# 🌟 [Tên Chủ Đề Cốt Lõi]
+## I. [Nhánh Chính 1]
+### 1. Ý phụ cấp 1
+- **Khái niệm then chốt**: Định nghĩa
+- **Số liệu / Ví dụ**: Chi tiết
+## II. [Nhánh Chính 2]
+(Làm tuần tự và đầy đủ cho toàn bộ các slide/chương).
+
+Nội dung:
+${content}`;
+    }
+
+    // Mặc định: toàn diện chuẩn sư phạm (comprehensive)
+    return `Bạn là Giảng Viên Học Thuật Cao Cấp và Chuyên Gia Tóm Tắt Giáo Trình & Slide Bài Giảng.
+${fileHeader}
+Nhiệm vụ: Hãy phân tích và tổng hợp toàn diện tài liệu/slide bài giảng sau thành một bản tóm tắt học thuật mẫu mực, chuẩn mực sư phạm:
+1. 🌟 **Tổng Quan & Mục Tiêu Bài Học**: Tài liệu/slide này giải quyết vấn đề gì?
+2. 📌 **Tóm Tắt Từng Phần / Slide Trọng Tâm**: Tóm tắt mạch lạc theo trình tự logic của từng slide hoặc từng chương.
+3. 🔑 **Bảng Thuật Ngữ & Khái Niệm Cốt Lõi (Glossary)**: Giải thích ngắn gọn, dễ hiểu các thuật ngữ quan trọng.
+4. 🧠 **Câu Hỏi Tự Luận Củng Cố Kiến Thức**: 3-4 câu hỏi kích thích tư duy đào sâu bản chất.
+
+Nội dung:
+${content}`;
+  };
 
   const handleSummarize = async () => {
-    if (!content.trim()) return;
+    if (!content.trim() && !fileInfo?.imagePart) {
+      return alert('Vui lòng tải lên file/slide hoặc dán nội dung văn bản cần tóm tắt!');
+    }
     setLoading(true);
     try {
-      const res = await generateText(`Tóm tắt tài liệu/slide sau thành: 1. Tóm lược cốt lõi, 2. Các ý chính, 3. Thuật ngữ quan trọng, 4. Câu hỏi ôn tập:
-${content}`);
+      const prompt = buildPrompt();
+      const res = await generateText(
+        prompt,
+        'Bạn là EduVerse AI Summarizer - Trợ lý tóm tắt tài liệu và slide bài giảng thông minh, trung thực với dữ kiện gốc, trình bày sư phạm đẹp mắt.',
+        fileInfo?.imagePart || null
+      );
       setSummary(res);
     } catch (e) {
       setSummary('⚠️ ' + formatAIError(e));
@@ -994,24 +1155,299 @@ ${content}`);
     setLoading(false);
   };
 
+  // Sao chép nội dung tóm tắt
+  const handleCopy = () => {
+    if (!summary) return;
+    navigator.clipboard.writeText(summary);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  // Tải file Markdown về máy
+  const handleDownload = () => {
+    if (!summary) return;
+    const blob = new Blob([summary], { type: 'text/markdown;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Tom_Tat_${fileInfo?.name ? fileInfo.name.replace(/\.[^/.]+$/, '') : 'Tai_Lieu'}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // Nghe đọc to bản tóm tắt
+  const handleSpeak = () => {
+    if (!summary) return;
+    if (isSpeaking) {
+      window.speechSynthesis?.cancel();
+      setIsSpeaking(false);
+    } else {
+      // Lọc bỏ ký hiệu markdown trước khi đọc
+      const plainText = summary.replace(/[#*_`$]/g, '').replace(/\[---.*?---\]/g, '');
+      speakText(plainText.slice(0, 1500), 'vi-VN', 1.0);
+      setIsSpeaking(true);
+      setTimeout(() => setIsSpeaking(false), 60000);
+    }
+  };
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      <div className="glass-panel rounded-2xl p-6 space-y-4">
-        <h2 className="text-xl font-bold">📄 Tóm Tắt Tài Liệu & Slide</h2>
-        <textarea
-          rows={10}
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-          placeholder="Dán nội dung giáo trình, bài báo hoặc slide vào đây..."
-          className="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-sm"
+      {/* CỘT TRÁI: KHU VỰC TẢI FILE / SLIDE VÀ NỘI DUNG */}
+      <div className="glass-panel rounded-3xl p-6 space-y-5 border border-indigo-500/20 shadow-xl bg-slate-900/80 backdrop-blur-md">
+        
+        {/* HEADER VÀ NÚT TẢI MẪU */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-800">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-xs px-3 py-0.5 rounded-full bg-pink-500/20 text-pink-300 font-bold border border-pink-500/30 flex items-center gap-1.5">
+                <FileText className="w-3.5 h-3.5" />
+                AI Document & Slide Summarizer
+              </span>
+            </div>
+            <h2 className="text-xl font-bold text-white flex items-center gap-2">
+              📄 Tóm Tắt Tài Liệu & Slide Thông Minh
+            </h2>
+          </div>
+
+          <button
+            onClick={loadSampleSlide}
+            className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-300 text-xs font-semibold flex items-center gap-1.5 border border-slate-700 transition-all active:scale-95 shadow"
+            title="Nạp một file slide bài giảng mẫu để thử nghiệm nhanh"
+          >
+            <Presentation className="w-3.5 h-3.5 text-cyan-400" />
+            <span>Nạp Slide Mẫu</span>
+          </button>
+        </div>
+
+        {/* VÙNG KÉO THẢ VÀ TẢI FILE LÊN (DROPZONE) */}
+        <input
+          type="file"
+          ref={fileInputRef}
+          onChange={handleFileChange}
+          accept=".pdf,.pptx,.docx,.txt,.md,.json,.csv,.html,.png,.jpg,.jpeg,.webp"
+          className="hidden"
         />
-        <button onClick={handleSummarize} disabled={loading} className="w-full py-3 bg-indigo-600 rounded-xl font-bold">
-          {loading ? 'Đang tóm tắt...' : 'Tóm Tắt Ngay'}
+
+        {!fileInfo ? (
+          <div
+            onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+            onDragLeave={() => setIsDragging(false)}
+            onDrop={handleDrop}
+            onClick={() => fileInputRef.current?.click()}
+            className={`border-2 border-dashed rounded-2xl p-6 text-center cursor-pointer transition-all ${
+              isDragging
+                ? 'border-pink-500 bg-pink-500/10 scale-102'
+                : 'border-slate-700 hover:border-pink-500/50 hover:bg-slate-800/40 bg-slate-950/40'
+            }`}
+          >
+            {extracting ? (
+              <div className="flex flex-col items-center justify-center py-4 space-y-3">
+                <Loader2 className="w-8 h-8 text-pink-400 animate-spin" />
+                <p className="text-sm font-semibold text-pink-300">
+                  Đang phân tích và trích xuất nội dung file/slide...
+                </p>
+                <p className="text-xs text-slate-400">Đang đọc các slide và cấu trúc văn bản</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="w-12 h-12 rounded-2xl bg-pink-500/15 border border-pink-500/30 text-pink-400 flex items-center justify-center mx-auto shadow-md">
+                  <FileUp className="w-6 h-6" />
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-white">
+                    Kéo thả hoặc <span className="text-pink-400 underline">bấm để tải file / slide</span> lên
+                  </p>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Hỗ trợ <strong>PowerPoint (.pptx)</strong>, <strong>PDF (.pdf)</strong>, <strong>Word (.docx)</strong>, <strong>Ảnh slide chụp (.jpg, .png)</strong>, <strong>Text (.txt, .md)</strong>
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          /* THẺ THÔNG TIN FILE ĐÃ TẢI LÊN */
+          <div className="p-4 rounded-2xl bg-slate-950/80 border border-slate-700/80 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3.5 min-w-0">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-pink-500/20 to-purple-500/20 border border-pink-500/30 flex items-center justify-center text-pink-400 shrink-0 shadow">
+                {fileInfo.type.includes('PPTX') ? (
+                  <Presentation className="w-6 h-6 text-amber-400" />
+                ) : fileInfo.isImage ? (
+                  <ImageIcon className="w-6 h-6 text-purple-400" />
+                ) : (
+                  <FileText className="w-6 h-6 text-cyan-400" />
+                )}
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-bold text-white truncate" title={fileInfo.name}>
+                  {fileInfo.name}
+                </p>
+                <div className="flex items-center gap-2 mt-0.5 text-xs text-slate-400">
+                  <span className="px-2 py-0.2 rounded-md bg-slate-800 text-cyan-300 font-mono text-[10px]">
+                    {fileInfo.type}
+                  </span>
+                  <span>{fileInfo.size}</span>
+                  {fileInfo.pageCount > 0 && (
+                    <span>• {fileInfo.pageCount} {fileInfo.type.includes('PPTX') ? 'Slide' : 'Trang'}</span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold border border-slate-700 transition-colors"
+                title="Thay thế bằng file khác"
+              >
+                Đổi file
+              </button>
+              <button
+                onClick={removeFile}
+                className="p-1.5 rounded-xl bg-red-500/20 hover:bg-red-500/30 text-red-400 text-xs transition-colors"
+                title="Gỡ file này"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* TÙY CHỌN PHONG CÁCH TÓM TẮT (SUMMARY MODES) */}
+        <div className="space-y-1.5">
+          <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+            <Layers className="w-3.5 h-3.5 text-pink-400" />
+            Chọn phong cách tóm tắt mong muốn:
+          </label>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+            {[
+              { id: 'comprehensive', label: '🎯 Toàn Diện', desc: 'Chuẩn học thuật' },
+              { id: 'quick', label: '⚡ Siêu Ngắn Gọn', desc: '5 ý then chốt' },
+              { id: 'exam', label: '📝 Trọng Tâm Thi', desc: 'Bẫy & trắc nghiệm' },
+              { id: 'mindmap', label: '🗺️ Sơ Đồ Tư Duy', desc: 'Dạng phân cấp' },
+            ].map((m) => (
+              <button
+                key={m.id}
+                onClick={() => setSummaryMode(m.id)}
+                className={`p-2.5 rounded-xl text-left border transition-all ${
+                  summaryMode === m.id
+                    ? 'bg-pink-600/25 border-pink-500 text-white shadow-md'
+                    : 'bg-slate-950/50 border-slate-800 text-slate-400 hover:text-white hover:bg-slate-800/40'
+                }`}
+              >
+                <p className="text-xs font-bold">{m.label}</p>
+                <p className="text-[10px] text-slate-400 mt-0.5">{m.desc}</p>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* KHUNG NỘI DUNG VĂN BẢN ĐÃ TRÍCH XUẤT HOẶC NHẬP TAY */}
+        <div className="space-y-2">
+          <div className="flex justify-between items-center text-xs">
+            <span className="font-semibold text-slate-300">
+              Nội dung văn bản (Đã trích xuất từ file hoặc dán trực tiếp):
+            </span>
+            {content && (
+              <span className="text-[11px] text-slate-400 font-mono">
+                {content.split(/\s+/).filter(Boolean).length} từ • {content.length} ký tự
+              </span>
+            )}
+          </div>
+          <textarea
+            rows={7}
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            placeholder="Nội dung file hoặc slide sau khi tải lên sẽ hiển thị tại đây. Bạn cũng có thể dán bài báo, giáo trình hoặc ghi chú bất kỳ vào đây..."
+            className="w-full bg-slate-950/80 border border-slate-700/80 focus:border-pink-500 rounded-2xl p-4 text-xs font-medium text-slate-200 focus:outline-none transition-all leading-relaxed placeholder:text-slate-500"
+          />
+        </div>
+
+        {/* NÚT THỰC HIỆN TÓM TẮT */}
+        <button
+          onClick={handleSummarize}
+          disabled={loading || extracting}
+          className="w-full py-3.5 bg-gradient-to-r from-pink-600 via-purple-600 to-indigo-600 hover:from-pink-500 hover:to-indigo-500 text-white rounded-2xl font-bold text-sm shadow-lg shadow-pink-600/25 active:scale-98 transition-all flex items-center justify-center gap-2 disabled:opacity-60"
+        >
+          {loading ? (
+            <>
+              <Loader2 className="w-5 h-5 animate-spin" />
+              <span>AI Đang Phân Tích & Tổng Hợp Tài Liệu / Slide...</span>
+            </>
+          ) : (
+            <>
+              <Sparkles className="w-5 h-5 text-yellow-300" />
+              <span>Tóm Tắt Ngay Với AI</span>
+            </>
+          )}
         </button>
       </div>
-      <div className="glass-panel rounded-2xl p-6 overflow-y-auto max-h-[75vh]">
-        <h3 className="font-bold text-cyan-400 mb-3">Bản Tóm Tắt Thông Minh:</h3>
-        {summary && <div className="prose prose-invert text-sm max-w-none" dangerouslySetInnerHTML={{ __html: renderMarkdownWithMath(summary) }} />}
+
+      {/* CỘT PHẢI: KẾT QUẢ BẢN TÓM TẮT THÔNG MINH */}
+      <div className="glass-panel rounded-3xl p-6 overflow-y-auto max-h-[85vh] border border-pink-500/20 shadow-xl bg-slate-900/80 backdrop-blur-md flex flex-col justify-between">
+        <div>
+          {/* HEADER CỘT KẾT QUẢ VÀ CÁC NÚT THAO TÁC */}
+          <div className="flex flex-wrap items-center justify-between pb-3 border-b border-slate-800 mb-4 gap-2">
+            <h3 className="font-bold text-cyan-400 flex items-center gap-2 text-base">
+              <Sparkles className="w-4 h-4 text-cyan-400" />
+              Bản Tóm Tắt Thông Minh:
+            </h3>
+
+            {summary && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleSpeak}
+                  className={`p-2 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                    isSpeaking 
+                      ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 animate-pulse' 
+                      : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
+                  }`}
+                  title={isSpeaking ? 'Dừng đọc' : 'Đọc to bản tóm tắt (TTS)'}
+                >
+                  <Volume2 className="w-3.5 h-3.5 text-cyan-400" />
+                  <span className="hidden sm:inline">{isSpeaking ? 'Dừng đọc' : 'Nghe'}</span>
+                </button>
+
+                <button
+                  onClick={handleCopy}
+                  className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 text-xs font-semibold flex items-center gap-1.5 transition-all active:scale-95"
+                  title="Sao chép toàn bộ bản tóm tắt"
+                >
+                  {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5 text-slate-400" />}
+                  <span className="hidden sm:inline">{copied ? 'Đã sao chép!' : 'Sao chép'}</span>
+                </button>
+
+                <button
+                  onClick={handleDownload}
+                  className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 text-xs font-semibold flex items-center gap-1.5 transition-all active:scale-95"
+                  title="Tải bản tóm tắt về máy (.md)"
+                >
+                  <Download className="w-3.5 h-3.5 text-pink-400" />
+                  <span className="hidden sm:inline">Tải về (.md)</span>
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* HIỂN THỊ NỘI DUNG TÓM TẮT ĐƯỢC RENDER MARKDOWN + KATEX */}
+          {summary ? (
+            <div
+              className="prose prose-invert text-sm max-w-none space-y-3 leading-relaxed"
+              dangerouslySetInnerHTML={{ __html: renderMarkdownWithMath(summary) }}
+            />
+          ) : (
+            <div className="flex flex-col items-center justify-center py-20 text-center space-y-4 text-slate-400">
+              <div className="w-16 h-16 rounded-3xl bg-pink-500/10 border border-pink-500/20 flex items-center justify-center text-pink-400 shadow-inner">
+                <FileText className="w-8 h-8" />
+              </div>
+              <div className="max-w-xs space-y-1.5">
+                <p className="font-bold text-slate-200">Chưa có bản tóm tắt</p>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  Tải lên slide bài giảng <strong>PowerPoint (.pptx)</strong>, tài liệu <strong>PDF</strong>, hoặc dán nội dung rồi nhấn <strong>"Tóm Tắt Ngay"</strong> để AI tổng hợp tri thức nhé.
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

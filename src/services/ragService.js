@@ -1,5 +1,6 @@
 import * as pdfjsLib from 'pdfjs-dist';
 import pdfWorker from 'pdfjs-dist/build/pdf.worker.mjs?url';
+import JSZip from 'jszip';
 
 // Cấu hình worker cho pdfjs trong Vite
 if (typeof window !== 'undefined') {
@@ -254,17 +255,128 @@ export function chunkDocument(document, targetChunkSize = 500, overlap = 80) {
 export async function extractTextFromFile(file) {
   const fileName = file.name.toLowerCase();
 
-  // 1. Nếu là file TXT / MD / JSON / CSV
-  if (fileName.endsWith('.txt') || fileName.endsWith('.md') || fileName.endsWith('.json') || fileName.endsWith('.csv')) {
+  // 1. Nếu là file TXT / MD / JSON / CSV / HTML
+  if (fileName.endsWith('.txt') || fileName.endsWith('.md') || fileName.endsWith('.json') || fileName.endsWith('.csv') || fileName.endsWith('.html')) {
     const text = await file.text();
     return {
       text,
       pageCount: 1,
       fileType: fileName.split('.').pop().toUpperCase(),
+      fileName: file.name,
+      fileSize: file.size,
     };
   }
 
-  // 2. Nếu là file PDF
+  // 2. Nếu là file PowerPoint (.pptx)
+  if (fileName.endsWith('.pptx')) {
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const zip = await JSZip.loadAsync(arrayBuffer);
+      const slideFiles = Object.keys(zip.files).filter((path) =>
+        /^ppt\/slides\/slide\d+\.xml$/i.test(path)
+      );
+
+      // Sắp xếp tự nhiên theo số thứ tự slide (slide1, slide2, ..., slide10)
+      slideFiles.sort((a, b) => {
+        const numA = parseInt(a.match(/slide(\d+)\.xml/i)[1], 10);
+        const numB = parseInt(b.match(/slide(\d+)\.xml/i)[1], 10);
+        return numA - numB;
+      });
+
+      let fullText = '';
+      const parser = new DOMParser();
+
+      for (let i = 0; i < slideFiles.length; i++) {
+        const slidePath = slideFiles[i];
+        const slideXml = await zip.files[slidePath].async('string');
+        const xmlDoc = parser.parseFromString(slideXml, 'text/xml');
+        const textNodes = xmlDoc.getElementsByTagName('a:t');
+        const slideTexts = [];
+        for (let j = 0; j < textNodes.length; j++) {
+          const val = textNodes[j].textContent?.trim();
+          if (val) slideTexts.push(val);
+        }
+        if (slideTexts.length > 0) {
+          fullText += `\n[--- SLIDE ${i + 1} ---]\n${slideTexts.join(' ')}\n`;
+        }
+      }
+
+      return {
+        text: fullText.trim() || 'Slide không chứa văn bản ký tự (có thể là slide chỉ toàn hình ảnh).',
+        pageCount: slideFiles.length || 1,
+        fileType: 'PPTX (PowerPoint)',
+        fileName: file.name,
+        fileSize: file.size,
+      };
+    } catch (err) {
+      console.error('Lỗi phân tích file PPTX:', err);
+      throw new Error('Không thể đọc file PowerPoint (.pptx). File có thể bị lỗi định dạng hoặc khóa.');
+    }
+  }
+
+  // 3. Nếu là file Microsoft Word (.docx)
+  if (fileName.endsWith('.docx')) {
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const zip = await JSZip.loadAsync(arrayBuffer);
+      const docFile = zip.files['word/document.xml'];
+      if (!docFile) throw new Error('Không tìm thấy nội dung văn bản trong file docx.');
+      const docXml = await docFile.async('string');
+      const parser = new DOMParser();
+      const xmlDoc = parser.parseFromString(docXml, 'text/xml');
+      const paragraphs = xmlDoc.getElementsByTagName('w:p');
+      const textLines = [];
+      for (let i = 0; i < paragraphs.length; i++) {
+        const textNodes = paragraphs[i].getElementsByTagName('w:t');
+        let line = '';
+        for (let j = 0; j < textNodes.length; j++) {
+          line += textNodes[j].textContent || '';
+        }
+        if (line.trim()) textLines.push(line.trim());
+      }
+      return {
+        text: textLines.join('\n\n'),
+        pageCount: Math.ceil(textLines.length / 25) || 1,
+        fileType: 'DOCX (Word)',
+        fileName: file.name,
+        fileSize: file.size,
+      };
+    } catch (err) {
+      console.error('Lỗi đọc file DOCX:', err);
+      throw new Error('Không thể đọc file Word (.docx). Vui lòng kiểm tra lại file.');
+    }
+  }
+
+  // 4. Nếu là hình ảnh Slide hoặc Tài liệu (.png, .jpg, .jpeg, .webp, .bmp)
+  if (/\.(png|jpe?g|webp|bmp)$/i.test(fileName)) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = reader.result;
+        const mimeType = file.type || 'image/jpeg';
+        const base64Data = dataUrl.split(',')[1];
+        resolve({
+          text: `[Hình ảnh slide/tài liệu: ${file.name}]`,
+          pageCount: 1,
+          fileType: 'IMAGE',
+          fileName: file.name,
+          fileSize: file.size,
+          isImage: true,
+          imageDataUrl: dataUrl,
+          imagePart: {
+            inlineData: {
+              mimeType,
+              data: base64Data
+            }
+          }
+        });
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  // 5. Nếu là file PDF
   if (fileName.endsWith('.pdf')) {
     try {
       const arrayBuffer = await file.arrayBuffer();
@@ -284,6 +396,8 @@ export async function extractTextFromFile(file) {
         text: fullText.trim(),
         pageCount: totalPages,
         fileType: 'PDF',
+        fileName: file.name,
+        fileSize: file.size,
       };
     } catch (err) {
       console.error('Lỗi phân tích file PDF:', err);
@@ -291,7 +405,7 @@ export async function extractTextFromFile(file) {
     }
   }
 
-  throw new Error('Định dạng file chưa được hỗ trợ. Vui lòng tải file PDF, TXT, MD hoặc JSON.');
+  throw new Error('Định dạng file chưa được hỗ trợ. Vui lòng tải file PDF, PPTX (Slide), DOCX, TXT hoặc ảnh slide (PNG, JPG).');
 }
 
 /**
