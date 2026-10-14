@@ -8,7 +8,7 @@ import { speakText, createSpeechRecognizer } from '../../services/speechService'
 import { 
   Sparkles, RotateCw, Volume2, Mic, Languages, CheckCircle2, 
   Target, Award, Volume1, ArrowRight, Loader2, BookOpen, History,
-  ChevronLeft, ChevronRight, SlidersHorizontal
+  ChevronLeft, ChevronRight, SlidersHorizontal, Layers, Eye, EyeOff
 } from 'lucide-react';
 
 // Câu dự phòng duy nhất phòng trường hợp mất mạng hoặc chưa cấu hình API Key
@@ -502,89 +502,393 @@ Hãy đánh giá phát âm chi tiết, cấu trúc chấm điểm:
   );
 }
 
-// 10. TỪ VỰNG 3D THEO CHỦ ĐỀ
-export function Vocab3DView({ englishMode }) {
-  const [topic, setTopic] = useState('');
-  const [cards, setCards] = useState([]);
-  const [flipped, setFlipped] = useState({});
-  const [loading, setLoading] = useState(false);
+// Ngân hàng từ vựng dự phòng nếu mất kết nối mạng
+const FALLBACK_VOCAB_SETS = {
+  'IELTS': [
+    { word: 'Ubiquitous', partOfSpeech: 'adjective', ipa: '/juːˈbɪkwɪtəs/', meaning: 'Có mặt ở khắp mọi nơi, phổ biến rộng rãi', example: 'Smartphones have become ubiquitous in daily modern life.', exampleTranslation: 'Điện thoại thông minh đã trở nên phổ biến khắp mọi nơi trong đời sống hiện đại.', level: 'C1 Academic' },
+    { word: 'Mitigate', partOfSpeech: 'verb', ipa: '/ˈmɪtɪɡeɪt/', meaning: 'Giảm nhẹ, xoa dịu mức độ nghiêm trọng', example: 'Prompt actions were taken to mitigate the environmental impact.', exampleTranslation: 'Các hành động kịp thời đã được thực hiện nhằm giảm nhẹ tác động môi trường.', level: 'C1 Academic' },
+    { word: 'Indispensable', partOfSpeech: 'adjective', ipa: '/ˌɪndɪˈspensəbl/', meaning: 'Không thể thiếu, tối quan trọng', example: 'Critical thinking is indispensable for academic excellence.', exampleTranslation: 'Tư duy phản biện là yếu tố không thể thiếu đối với thành tích học thuật xuất sắc.', level: 'C1 Academic' },
+    { word: 'Proponent', partOfSpeech: 'noun', ipa: '/prəˈpəʊnənt/', meaning: 'Người ủng hộ, tán thành quan điểm/chính sách', example: 'She is a vocal proponent of renewable green energy.', exampleTranslation: 'Cô ấy là một người lên tiếng ủng hộ mạnh mẽ năng lượng xanh tái tạo.', level: 'B2 Academic' },
+    { word: 'Exacerbate', partOfSpeech: 'verb', ipa: '/ɪɡˈzæsəbeɪt/', meaning: 'Làm trầm trọng thêm (vấn đề, dịch bệnh, xung đột)', example: 'Air pollution will exacerbate respiratory illnesses among youth.', exampleTranslation: 'Ô nhiễm không khí sẽ làm trầm trọng thêm các bệnh đường hô hấp ở giới trẻ.', level: 'C1 Academic' },
+    { word: 'Pragmatic', partOfSpeech: 'adjective', ipa: '/præɡˈmætɪk/', meaning: 'Thực dụng, chú trọng tính thực tiễn và kết quả', example: 'We must adopt a pragmatic approach to solve this dilemma.', exampleTranslation: 'Chúng ta phải áp dụng một cách tiếp cận thực tiễn để giải quyết tình thế tiến thoái lưỡng nan này.', level: 'C1 Academic' }
+  ],
+  'TOEIC': [
+    { word: 'Collaborate', partOfSpeech: 'verb', ipa: '/kəˈlæbəreɪt/', meaning: 'Hợp tác, phối hợp cùng làm việc', example: 'Both departments will collaborate on the quarterly project.', exampleTranslation: 'Cả hai phòng ban sẽ phối hợp cùng nhau trong dự án quý này.', level: 'TOEIC 750+' },
+    { word: 'Subsidize', partOfSpeech: 'verb', ipa: '/ˈsʌbsɪdaɪz/', meaning: 'Trợ cấp, bao cấp một phần chi phí', example: 'The company agreed to subsidize public transit for staff.', exampleTranslation: 'Công ty đã đồng ý trợ cấp chi phí xe công cộng cho nhân viên.', level: 'TOEIC 800+' },
+    { word: 'Feasible', partOfSpeech: 'adjective', ipa: '/ˈfiːzəbl/', meaning: 'Khả thi, có thể thực hiện được', example: 'The board is evaluating whether the proposal is financially feasible.', exampleTranslation: 'Ban giám đốc đang đánh giá xem đề xuất này có khả thi về mặt tài chính hay không.', level: 'TOEIC 800+' },
+    { word: 'Reimburse', partOfSpeech: 'verb', ipa: '/ˌriːɪmˈbɜːs/', meaning: 'Hoàn tiền, thanh toán lại công tác phí', example: 'We will reimburse all approved travel expenses within five days.', exampleTranslation: 'Chúng tôi sẽ hoàn lại mọi chi phí đi lại đã được duyệt trong vòng năm ngày.', level: 'TOEIC 700+' },
+    { word: 'Prominently', partOfSpeech: 'adverb', ipa: '/ˈprɒmɪnəntli/', meaning: 'Nổi bật, ở vị trí dễ quan sát', example: 'Safety guidelines must be displayed prominently in the warehouse.', exampleTranslation: 'Quy tắc an toàn phải được dán nổi bật tại kho xưởng.', level: 'TOEIC 750+' },
+    { word: 'Tentative', partOfSpeech: 'adjective', ipa: '/ˈtentətɪv/', meaning: 'Dự kiến, tạm thời (chưa chính thức chốt)', example: 'We reached a tentative agreement on the delivery schedule.', exampleTranslation: 'Chúng tôi đã đạt được thỏa thuận dự kiến về lịch trình giao hàng.', level: 'TOEIC 800+' }
+  ],
+  'Tiếng Anh Phổ Thông': [
+    { word: 'Confident', partOfSpeech: 'adjective', ipa: '/ˈkɒnfɪdənt/', meaning: 'Tự tin, tràn đầy niềm tin vào bản thân', example: 'She feels confident in presenting her ideas in English.', exampleTranslation: 'Cô ấy cảm thấy tự tin khi thuyết trình các ý tưởng của mình bằng tiếng Anh.', level: 'THPT / B1' },
+    { word: 'Inspire', partOfSpeech: 'verb', ipa: '/ɪnˈspaɪər/', meaning: 'Truyền cảm hứng, khơi nguồn sáng tạo', example: 'Dedicated teachers always inspire students to learn more.', exampleTranslation: 'Những người thầy tận tâm luôn truyền cảm hứng cho học sinh học hỏi nhiều hơn.', level: 'THPT / B1' },
+    { word: 'Opportunity', partOfSpeech: 'noun', ipa: '/ˌɒpəˈtjuːnəti/', meaning: 'Cơ hội, dịp thuận lợi', example: 'Studying abroad is a wonderful opportunity to grow.', exampleTranslation: 'Du học là một cơ hội tuyệt vời để trưởng thành.', level: 'THCS - THPT' },
+    { word: 'Achieve', partOfSpeech: 'verb', ipa: '/əˈtʃiːv/', meaning: 'Đạt được, gặt hái thành công (mục tiêu)', example: 'Hard work will help you achieve your personal dreams.', exampleTranslation: 'Chăm chỉ sẽ giúp bạn đạt được những ước mơ của bản thân.', level: 'THPT / B1' },
+    { word: 'Enthusiastic', partOfSpeech: 'adjective', ipa: '/ɪnˌθjuːziˈæstɪk/', meaning: 'Nhiệt tình, hào hứng, say mê', example: 'Students were very enthusiastic about the school festival.', exampleTranslation: 'Học sinh đã rất hào hứng với lễ hội của trường.', level: 'THPT / B2' },
+    { word: 'Valuable', partOfSpeech: 'adjective', ipa: '/ˈvæljuəbl/', meaning: 'Có giá trị, quý báu, hữu ích', example: 'My tutor gave me valuable advice on exam preparation.', exampleTranslation: 'Gia sư đã cho tôi những lời khuyên quý báu về việc chuẩn bị thi cử.', level: 'THCS - THPT' }
+  ]
+};
 
-  const generateVocab = async () => {
-    if (!topic.trim()) return;
+const VOCAB_TOPIC_PRESETS = [
+  'Ngẫu nhiên',
+  'Technology & AI',
+  'Environment & Climate',
+  'Business & Finance',
+  'Education & University',
+  'Daily Life & Social',
+  'Travel, Culture & Food',
+  'Idioms & Collocations'
+];
+
+// 10. TỪ VỰNG 3D THEO CHỦ ĐỀ - 100% GEMINI AI SINH REAL-TIME VỚI NÚT TẢI LẠI
+export function Vocab3DView({ englishMode }) {
+  const fallback = FALLBACK_VOCAB_SETS[englishMode] || FALLBACK_VOCAB_SETS['IELTS'];
+
+  const [topic, setTopic] = useState('');
+  const [selectedPreset, setSelectedPreset] = useState('Ngẫu nhiên');
+  const [cards, setCards] = useState(fallback);
+  const [flipped, setFlipped] = useState({});
+  const [allFlipped, setAllFlipped] = useState(false);
+  const [loading, setLoading] = useState(false);
+  
+  // Lịch sử các bộ từ AI đã tạo trong phiên học
+  const [historySets, setHistorySets] = useState([{ topic: 'Mẫu khởi đầu', cards: fallback }]);
+  const [historyIndex, setHistoryIndex] = useState(0);
+
+  // Gọi Gemini AI tạo bộ 6 từ vựng mới toanh theo thời gian thực
+  const generateVocab = async (overrideTopic = null) => {
     setLoading(true);
     try {
+      const activeTopic = overrideTopic || topic.trim() || (selectedPreset !== 'Ngẫu nhiên' ? selectedPreset : 'đa dạng, mang tính thực tế và tính ứng dụng cao');
+      const randomSeed = Math.floor(Math.random() * 1000000);
+
+      const prompt = `Bạn là Chuyên gia Khảo thí và Ngôn ngữ học Tiếng Anh hàng đầu.
+Nhiệm vụ: Hãy sáng tác 1 bộ gồm 6 từ vựng/cụm từ tiếng Anh hoàn toàn MỚI LẠ, ĐỘC ĐÁO, KHÔNG TRÙNG LẶP (Seed: ${randomSeed}, timestamp: ${Date.now()}) theo chuẩn hệ đào tạo: "${englishMode}".
+Chủ đề: "${activeTopic}".
+
+Yêu cầu chi tiết cho 6 từ vựng:
+1. "word": Từ vựng hoặc cụm collocations/phrasal verbs chất lượng cao (IELTS Band 7.0-8.5, TOEIC 750-990, hoặc THPT nâng cao).
+2. "partOfSpeech": Loại từ (noun, verb, adjective, adverb, idiom, collocation).
+3. "ipa": Phiên âm IPA chuẩn quốc tế cho từ.
+4. "meaning": Định nghĩa và nghĩa tiếng Việt tự nhiên, súc tích, chuẩn ngữ cảnh.
+5. "example": Câu ví dụ tiếng Anh tự nhiên, học thuật và dễ liên tưởng.
+6. "exampleTranslation": Bản dịch nghĩa tiếng Việt của câu ví dụ.
+7. "level": Cấp độ (VD: "IELTS 8.0", "C1 Advanced", "TOEIC 850+", "THPT Nâng Cao").
+
+Trả về ĐÚNG một mảng JSON gồm 6 đối tượng theo cấu trúc sau:`;
+
       const schema = {
         type: Type.ARRAY,
         items: {
           type: Type.OBJECT,
           properties: {
             word: { type: Type.STRING },
+            partOfSpeech: { type: Type.STRING },
             ipa: { type: Type.STRING },
             meaning: { type: Type.STRING },
-            example: { type: Type.STRING }
+            example: { type: Type.STRING },
+            exampleTranslation: { type: Type.STRING },
+            level: { type: Type.STRING }
           },
-          required: ['word', 'ipa', 'meaning', 'example']
+          required: ['word', 'partOfSpeech', 'ipa', 'meaning', 'example', 'exampleTranslation', 'level']
         }
       };
-      const data = await generateJSON(
-        `Tạo 6 từ vựng tiếng Anh chất lượng cao theo chuẩn ${englishMode} về chủ đề "${topic}".`,
-        schema
-      );
-      setCards(data);
-      setFlipped({});
+
+      const data = await generateJSON(prompt, schema);
+      
+      if (Array.isArray(data) && data.length > 0) {
+        setCards(data);
+        setFlipped({});
+        setAllFlipped(false);
+        setHistorySets((prev) => [{ topic: activeTopic, cards: data }, ...prev]);
+        setHistoryIndex(0);
+      }
     } catch (e) {
-      alert(formatAIError(e));
+      console.error('Lỗi khi tạo từ vựng:', e);
+      alert('Không thể tạo bộ từ mới: ' + formatAIError(e));
     }
     setLoading(false);
   };
 
+  // Tự động kích hoạt AI sinh bộ từ mới khi chuyển hệ đào tạo englishMode
+  React.useEffect(() => {
+    generateVocab();
+  }, [englishMode]);
+
+  // Lật hoặc úp tất cả thẻ cùng lúc
+  const toggleFlipAll = () => {
+    const newState = !allFlipped;
+    setAllFlipped(newState);
+    const newFlipped = {};
+    cards.forEach((_, i) => {
+      newFlipped[i] = newState;
+    });
+    setFlipped(newFlipped);
+  };
+
+  // Xem bộ từ trước đó trong lịch sử
+  const handlePrevHistory = () => {
+    if (historyIndex < historySets.length - 1) {
+      const nextIdx = historyIndex + 1;
+      setHistoryIndex(nextIdx);
+      setCards(historySets[nextIdx].cards);
+      setFlipped({});
+      setAllFlipped(false);
+    }
+  };
+
+  // Xem bộ từ mới hơn trong lịch sử
+  const handleNextHistory = () => {
+    if (historyIndex > 0) {
+      const nextIdx = historyIndex - 1;
+      setHistoryIndex(nextIdx);
+      setCards(historySets[nextIdx].cards);
+      setFlipped({});
+      setAllFlipped(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
-      <div className="glass-panel rounded-2xl p-6 flex gap-4">
-        <input
-          value={topic}
-          onChange={(e) => setTopic(e.target.value)}
-          placeholder={`Nhập chủ đề từ vựng (${englishMode}) - VD: Environment, Technology, Business...`}
-          className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm"
-        />
-        <button onClick={generateVocab} disabled={loading} className="px-6 py-3 bg-emerald-600 rounded-xl font-bold text-sm">
-          {loading ? 'Đang tạo Flashcard 3D...' : 'Tạo Flashcard 3D'}
-        </button>
+      {/* THANH ĐIỀU KHIỂN & BỘ LỌC CHỦ ĐỀ CHO AI */}
+      <div className="glass-panel rounded-3xl p-6 border border-emerald-500/20 bg-slate-900/80 shadow-xl backdrop-blur-md space-y-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-xs px-3 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30">
+                {englishMode} Vocabulary 3D
+              </span>
+              <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 font-semibold border border-cyan-500/30 flex items-center gap-1">
+                <Sparkles className="w-3 h-3 text-yellow-300" />
+                100% AI sinh theo thời gian thực
+              </span>
+            </div>
+            <h3 className="text-xl font-bold text-white flex items-center gap-2">
+              <BookOpen className="w-5 h-5 text-emerald-400" />
+              Thẻ Ghi Nhớ Từ Vựng 3D Không Gian Chiều
+            </h3>
+          </div>
+
+          {/* Cụm nút Lật tất cả & Đổi bộ từ khác */}
+          <div className="flex flex-wrap items-center gap-2">
+            {historySets.length > 1 && (
+              <div className="flex items-center bg-slate-800/80 rounded-xl p-0.5 border border-slate-700">
+                <button
+                  onClick={handlePrevHistory}
+                  disabled={historyIndex >= historySets.length - 1}
+                  title="Xem lại bộ từ AI đã tạo trước đó"
+                  className="p-1.5 rounded-lg text-slate-300 hover:text-white disabled:opacity-30 transition-colors"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <span className="text-[10px] font-mono px-2 text-slate-400">
+                  Bộ {historySets.length - historyIndex}/{historySets.length}
+                </span>
+                <button
+                  onClick={handleNextHistory}
+                  disabled={historyIndex <= 0}
+                  title="Chuyển đến bộ từ mới hơn"
+                  className="p-1.5 rounded-lg text-slate-300 hover:text-white disabled:opacity-30 transition-colors"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+
+            <button
+              onClick={toggleFlipAll}
+              title="Lật đồng loạt cả 6 thẻ để xem hoặc ôn tập"
+              className="px-3.5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl text-xs font-bold flex items-center gap-1.5 border border-slate-700 transition-all active:scale-95"
+            >
+              {allFlipped ? <EyeOff className="w-4 h-4 text-amber-400" /> : <Eye className="w-4 h-4 text-cyan-400" />}
+              <span>{allFlipped ? 'Úp Lại Mặt Trước' : 'Lật Tất Cả Thẻ'}</span>
+            </button>
+
+            <button
+              onClick={() => generateVocab()}
+              disabled={loading}
+              title="AI tự động sáng tạo 6 từ vựng mới toanh theo chuẩn hệ đào tạo"
+              className="px-4 py-2.5 bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 hover:from-emerald-500 hover:to-cyan-500 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-lg shadow-emerald-600/30 active:scale-95 transition-all disabled:opacity-60"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>AI Đang Soạn Bộ Từ Mới...</span>
+                </>
+              ) : (
+                <>
+                  <RotateCw className="w-4 h-4 text-yellow-300" />
+                  <span>Đổi Bộ Từ Khác (AI)</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* Ô NHẬP CHỦ ĐỀ TÙY CHỌN */}
+        <div className="flex gap-2">
+          <input
+            value={topic}
+            onChange={(e) => setTopic(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') generateVocab();
+            }}
+            placeholder={`Nhập chủ đề tùy ý (VD: Artificial Intelligence, Job Interview, Climate Change, Food & Dining...)`}
+            className="flex-1 bg-slate-950/80 border border-slate-700/80 focus:border-emerald-500 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none transition-all placeholder:text-slate-500"
+          />
+          <button
+            onClick={() => generateVocab()}
+            disabled={loading}
+            className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-cyan-300 rounded-xl text-xs font-bold active:scale-95 transition-all shrink-0"
+          >
+            Tạo Theo Chủ Đề Này
+          </button>
+        </div>
+
+        {/* CÁC CHỦ ĐỀ GỢI Ý NHANH (QUICK CHIPS) */}
+        <div className="flex items-center gap-1.5 flex-wrap pt-1 text-xs">
+          <span className="text-slate-400 text-[11px] font-semibold mr-1 flex items-center gap-1">
+            <SlidersHorizontal className="w-3 h-3 text-emerald-400" />
+            Gợi ý nhanh:
+          </span>
+          {VOCAB_TOPIC_PRESETS.map((p) => (
+            <button
+              key={p}
+              onClick={() => {
+                setSelectedPreset(p);
+                setTopic(p === 'Ngẫu nhiên' ? '' : p);
+                generateVocab(p === 'Ngẫu nhiên' ? null : p);
+              }}
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all ${
+                selectedPreset === p
+                  ? 'bg-emerald-500/25 text-emerald-300 border border-emerald-500/50 shadow-sm'
+                  : 'bg-slate-800/70 text-slate-400 hover:text-white hover:bg-slate-800 border border-slate-800'
+              }`}
+            >
+              {p}
+            </button>
+          ))}
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {cards.map((c, i) => (
-          <div
-            key={i}
-            onClick={() => setFlipped({ ...flipped, [i]: !flipped[i] })}
-            className="h-56 perspective-1000 cursor-pointer"
-          >
-            <div className={`relative w-full h-full transform-style-3d ${flipped[i] ? 'rotate-y-180' : ''}`}>
-              <div className="absolute inset-0 glass-panel rounded-2xl p-6 backface-hidden flex flex-col justify-between border border-emerald-500/30">
-                <div className="flex justify-between items-center">
-                  <span className="text-xs text-emerald-400 font-bold">{englishMode}</span>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); speakText(c.word); }}
-                    className="px-2.5 py-1 rounded-lg bg-slate-800 text-xs"
-                  >
-                    🔊 Phát âm
-                  </button>
-                </div>
-                <div className="text-center">
-                  <h3 className="text-2xl font-bold text-white">{c.word}</h3>
-                  <p className="text-sm text-cyan-400 mt-1">{c.ipa}</p>
-                </div>
-                <p className="text-[11px] text-center text-slate-400">👆 Bấm để lật thẻ 3D xem nghĩa</p>
+      {/* KHUNG HIỂN THỊ CÁC THẺ 3D FLIP */}
+      {loading ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {[1, 2, 3, 4, 5, 6].map((idx) => (
+            <div key={idx} className="h-64 rounded-3xl glass-panel border border-slate-800 p-6 flex flex-col justify-between animate-pulse bg-slate-900/60">
+              <div className="flex justify-between items-center">
+                <div className="h-4 w-16 bg-slate-800 rounded-full" />
+                <div className="h-6 w-20 bg-slate-800 rounded-lg" />
               </div>
+              <div className="space-y-2 text-center my-auto">
+                <div className="h-8 w-36 bg-slate-800 rounded-xl mx-auto" />
+                <div className="h-4 w-24 bg-slate-800/60 rounded-lg mx-auto" />
+              </div>
+              <div className="h-3 w-40 bg-slate-800/50 rounded-full mx-auto" />
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {cards.map((c, i) => (
+            <div
+              key={i}
+              onClick={() => setFlipped({ ...flipped, [i]: !flipped[i] })}
+              className="h-64 perspective-1000 cursor-pointer select-none group"
+            >
+              <div
+                className={`relative w-full h-full transform-style-3d transition-transform duration-500 rounded-3xl ${
+                  flipped[i] ? 'rotate-y-180' : ''
+                }`}
+              >
+                {/* MẶT TRƯỚC THẺ: TỪ VỰNG, IPA, LOẠI TỪ, PHÁT ÂM */}
+                <div className="absolute inset-0 glass-panel rounded-3xl p-6 backface-hidden flex flex-col justify-between border border-emerald-500/25 bg-slate-900/80 shadow-lg group-hover:border-emerald-500/50 transition-colors">
+                  <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30">
+                        {c.level || englishMode}
+                      </span>
+                      {c.partOfSpeech && (
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 font-medium italic border border-slate-700">
+                          {c.partOfSpeech}
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        speakText(c.word);
+                      }}
+                      title="Phát âm từ vựng"
+                      className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 text-cyan-300 text-xs font-bold flex items-center gap-1 border border-slate-700 shadow transition-all"
+                    >
+                      <Volume2 className="w-3.5 h-3.5 text-cyan-400" />
+                      <span>Nghe</span>
+                    </button>
+                  </div>
 
-              <div className="absolute inset-0 glass-panel rounded-2xl p-6 backface-hidden rotate-y-180 flex flex-col justify-center bg-indigo-950/80 border border-indigo-400/40">
-                <p className="text-lg font-bold text-emerald-300 mb-2">{c.meaning}</p>
-                <p className="text-xs text-slate-200 italic">"{c.example}"</p>
+                  <div className="text-center my-auto space-y-1.5">
+                    <h3 className="text-2xl md:text-3xl font-extrabold text-white tracking-wide group-hover:text-cyan-200 transition-colors">
+                      {c.word}
+                    </h3>
+                    <p className="text-xs font-mono text-cyan-400/90 tracking-wider">
+                      {c.ipa}
+                    </p>
+                  </div>
+
+                  <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
+                    <span className="text-slate-400">#Thẻ {i + 1}</span>
+                    <span className="text-emerald-400 font-medium flex items-center gap-1">
+                      👆 Bấm để lật xem nghĩa
+                    </span>
+                  </div>
+                </div>
+
+                {/* MẶT SAU THẺ: NGHĨA TIẾNG VIỆT, VÍ DỤ, BẢN DỊCH VÍ DỤ, PHÁT ÂM CÂU */}
+                <div className="absolute inset-0 glass-panel rounded-3xl p-6 backface-hidden rotate-y-180 flex flex-col justify-between bg-gradient-to-br from-indigo-950/90 via-slate-900/95 to-slate-950 border border-indigo-400/40 shadow-xl">
+                  <div>
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-[10px] uppercase font-bold text-indigo-300 tracking-wider bg-indigo-500/20 px-2 py-0.5 rounded-md border border-indigo-500/30">
+                        Ý nghĩa
+                      </span>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          speakText(c.example);
+                        }}
+                        title="Nghe phát âm cả câu ví dụ"
+                        className="px-2 py-1 rounded-lg bg-indigo-900/60 hover:bg-indigo-800 text-indigo-200 text-[10px] font-semibold flex items-center gap-1 border border-indigo-700/60 transition-all active:scale-95"
+                      >
+                        <Volume2 className="w-3 h-3 text-cyan-300" />
+                        <span>Nghe ví dụ</span>
+                      </button>
+                    </div>
+                    <p className="text-base font-bold text-emerald-300 leading-snug">
+                      {c.meaning}
+                    </p>
+                  </div>
+
+                  <div className="p-2.5 rounded-xl bg-slate-900/90 border border-indigo-950 space-y-1">
+                    <p className="text-xs text-slate-200 italic leading-relaxed">
+                      "{c.example}"
+                    </p>
+                    {c.exampleTranslation && (
+                      <p className="text-[11px] text-slate-400 leading-relaxed border-t border-slate-800/80 pt-1">
+                        → {c.exampleTranslation}
+                      </p>
+                    )}
+                  </div>
+
+                  <p className="text-[10px] text-center text-slate-400 pt-1">
+                    👆 Bấm để lật lại mặt trước
+                  </p>
+                </div>
               </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
