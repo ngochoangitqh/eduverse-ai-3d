@@ -21,6 +21,7 @@ import {
 import {
   subscribeToAuthChanges, loginWithGoogle, logoutUser
 } from './services/firebaseService';
+import { getGeminiApiKey } from './services/geminiService';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -29,7 +30,7 @@ export default function App() {
   const [showAuthModal, setShowAuthModal] = useState(true);
   const [authModalMode, setAuthModalMode] = useState('register');
   const [modalTab, setModalTab] = useState('gemini'); // 'gemini' | 'firebase'
-  const [apiKey, setApiKey] = useState(localStorage.getItem('GEMINI_API_KEY') || '');
+  const [apiKey, setApiKey] = useState(getGeminiApiKey() || '');
   const [firebaseSnippet, setFirebaseSnippet] = useState('');
   const [firebaseConfigState, setFirebaseConfigState] = useState(getFirebaseConfig());
   const [currentUser, setCurrentUser] = useState(null);

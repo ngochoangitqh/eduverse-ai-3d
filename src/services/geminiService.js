@@ -1,7 +1,16 @@
 import { GoogleGenAI } from '@google/genai';
 
+export const getGeminiApiKey = () => {
+  const localKey = (localStorage.getItem('GEMINI_API_KEY') || '').trim();
+  // Bỏ qua nếu người dùng lỡ dán key Firebase vào ô Gemini
+  if (localKey && !localKey.startsWith('AIzaSyAbDr7qB_SfVZHLT1qfnN0PnBjGTicOPGg')) {
+    return localKey;
+  }
+  return (import.meta.env.VITE_GEMINI_API_KEY || '').trim();
+};
+
 export const getAIClient = () => {
-  const key = import.meta.env.VITE_GEMINI_API_KEY || localStorage.getItem('GEMINI_API_KEY');
+  const key = getGeminiApiKey();
   if (!key) {
     throw new Error('Vui lòng nhập Gemini API Key ở góc trên màn hình hoặc trong file .env!');
   }

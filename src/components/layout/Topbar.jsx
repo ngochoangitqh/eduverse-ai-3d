@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { Key } from 'lucide-react';
+import { getGeminiApiKey } from '../../services/geminiService';
 
 export default function Topbar({ englishMode, setEnglishMode }) {
-  const [apiKey, setApiKey] = useState(localStorage.getItem('GEMINI_API_KEY') || '');
+  const [apiKey, setApiKey] = useState(getGeminiApiKey() || '');
   const [showKeyModal, setShowKeyModal] = useState(false);
 
   const saveKey = () => {
